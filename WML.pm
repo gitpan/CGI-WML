@@ -17,7 +17,7 @@ require Exporter;
 # but we define our own, and we have to avoid the 'sub foo redefined..' warning
 # We also take care just to import WML-ok routines.
 
-use CGI qw(:internal :ssl param upload path_info path_translated url self_url
+use CGI 2.79 qw(:internal :ssl param upload path_info path_translated url self_url
   	   script_name cookie raw_cookie request_method query_string Accept
   	   user_agent remote_host content_type remote_addr referer server_name
   	   server_software server_port server_protocol protocol virtual_host
@@ -39,8 +39,8 @@ if ($USEXMLPARSER) {
 # Do not simply export all your public functions/methods/constants.
 @EXPORT = qw();
 
-$VERSION = "0.07";
-$RCSVERSION = do{my@r=q$Revision: 1.66 $=~/\d+/g;sprintf '%d.'.'%02d'x$#r,@r};
+$VERSION = "0.08";
+$RCSVERSION = do{my@r=q$Revision: 1.67 $=~/\d+/g;sprintf '%d.'.'%02d'x$#r,@r};
 
 my $DEFAULT_DTD     = '-//WAPFORUM//DTD WML 1.1//EN';
 my $DEFAULT_DTD_URL = 'http://www.wapforum.org/DTD/wml_1.1.xml';
@@ -1617,6 +1617,14 @@ improvements by Andy Murren <andy@murren.org>
       function content-type override.
 
 =head1 CHANGES
+
+Version 0.08
+
+As of CGI.pm version 2.79 TempFile was changed to CGITempFile.  When I
+made the change in CGI::WML version 0.06 I did not take the CGI.pm version 
+into account.  The module now requires CGI.pm version 2.79 or greater.
+This may mess up a few users who have not upgraded to the latest version of
+CGI.pm (2.88 as of this writing).
 
 Version 0.07
 

@@ -85,4 +85,9 @@ Revision history for Perl extension CGI::WML.
 1.66  2003/01/29
 	- Corrected some documentation about constructing a deck and the TO DO
 	  Added to http://sourceforge.net/projects/cgi-wml/  as CGI::WML-0.07
-	  Submitted to CPAN as CGI::WML-0.07
+	  Submitted to CPAN as CGI::WML-0.0
+
+1.67  2003/02/18
+	- Now requires CGI.pm version >= 2.79 so CGITempFile is available.
+	  Added to http://sourceforge.net/projects/cgi-wml/  as CGI::WML-0.08
+	  Submitted to CPAN as CGI::WML-0.08

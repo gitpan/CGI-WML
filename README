@@ -14,8 +14,8 @@ Copying:
 	itself.
 
 Prerequisites:
-    perl 5.004, CGI.pm, HTML::Parser, HTML::TokeParser, HTML::TableExtract
-    and XML::Parser
+    perl 5.004, CGI.pm (>=2.79), HTML::Parser, HTML::TokeParser,
+    HTML::TableExtract and XML::Parser
    
     The XML::Parser dependancy can be removed at compile-time.
 

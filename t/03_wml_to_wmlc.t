@@ -24,7 +24,6 @@ if  ($CGI::WML::USEXMLPARSER == 1) {
 
     $wmlc = $q->wml_to_wmlc( -wml=>$wml,
                              -errorcontext=>1);
-
     (defined $wmlc) && print "ok 3\n";
 }else{
     print "ok 3 # Skip\n";
