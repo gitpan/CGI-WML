@@ -1,38 +1,40 @@
 package CGI::WML;
 
-use vars qw($VERSION @ISA @EXPORT @EXPORT_OK $USEXMLPARSER);
+use vars qw($VERSION $RCSVERSION @ISA @EXPORT @EXPORT_OK $USEXMLPARSER %WBML_TAGS %WBML_ATTRS %WBML_VALUES %WBML_NO_CLOSE_TAGS $AUTOLOAD);
 
 $USEXMLPARSER=1;
 
-use CGI;
+require CGI;  # Not "use" anymore.
+use CGI::Util qw(rearrange make_attributes unescape escape expires);
 if ($USEXMLPARSER) {
     use XML::Parser;
 }
 use HTML::TokeParser;
+use HTML::TableExtract;
 use IO::Handle;
 use IO::File;
 use Carp;
-use strict;
-#no strict 'vars';
-no strict 'subs';
+#use strict;       # AUTOLOAD bit can't currently 'use strict';
+#no strict 'subs'; # rearrange() stuff breaks 'strict subs' too.
 
 require Exporter;
 
-@ISA = qw(Exporter CGI);
+@ISA = qw(Exporter CGI);  # Inheret from CGI.pm
+
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
 @EXPORT = qw(
 );
 
-
-$VERSION = do{my@r=q$Revision: 0.02 $=~/\d+/g;sprintf '%d.'.'%02d'x$#r,@r};
+$VERSION = "0.03";
+$RCSVERSION = do{my@r=q$Revision: 1.61 $=~/\d+/g;sprintf '%d.'.'%02d'x$#r,@r};
 
 my $DEFAULT_DTD     = '-//WAPFORUM//DTD WML 1.1//EN';
 my $DEFAULT_DTD_URL = 'http://www.wapforum.org/DTD/wml_1.1.xml';
 
-my $DOTABLE = 0; #use string tables. do not change, stringtables not done.
-my ($WBML_RETBUFF,%STRTAB);
+my $DOTABLE = 1; # Wether to use string tables.
+my ($WBML_RETBUFF,%TEMP_STRTAB,%STRTAB);
 
 # Wireless Binary Markup Language, as defined in WAP forum docs
 my $WBML_INLINE_STRING     = 0x03;
@@ -43,174 +45,185 @@ my $WMLTC_CONTENT          = 0x40;
 my $WMLTC_END              = 0x01;
 
  
-my %WBML_TAGS = (
-        'a' => '29',
-	'td' => '30',
-	'tr' => '31',
-	'table' => '32',
-	'p' => '33',
-	'postfield' => '34',
-	'anchor' => '35',
-	'access' => '36',
-	'b' => '37',
-	'big' => '38',
-	'br' => '39',
-	'card' => '40',
-	'do' => '41',
-	'em' => '42',
-	'fieldset' => '43',
-	'go' => '44',
-	'head' => '45',
-	'i' => '46',
-	'img' => '47',
-	'input' => '48',
-	'meta' => '49',
-	'noop' => '50',
-	'prev' => '51',
-	'onevent' => '52',
-	'optgroup' => '53',
-	'option' => '54',
-	'refresh' => '55',
-	'select' => '56',
-	'small' => '57',
-	'strong' => '58',
-	'UNUSED' => '59',
-	'template' => '60',
-	'timer' => '61',
-	'u' => '62',
-	'setvar' => '63',
-	'wml' => '64');
+%WBML_TAGS = (      # dec      # hex 
+        'pre'       => '27',     # 0x1B
+        'a'         => '28',     # 0x1C 
+        'td'        => '29',     # 0x1D 
+        'tr'        => '30',     # 0x1E 
+        'Tr'        => '30',     # 0x1E
+        'table'     => '31',     # 0x1F
+        'p'         => '32',     # 0x20
+        'postfield' => '33',     # 0x21
+        'anchor'    => '34',     # 0x22
+        'access'    => '35',     # 0x23
+        'b'         => '36',     # 0x24
+        'big'       => '37',     # 0x25
+        'br'        => '38',     # 0x26
+        'card'      => '39',     # 0x27
+        'do'        => '40',     # 0x28
+        'em'        => '41',     # 0x29
+        'fieldset'  => '42',     # 0x2A
+        'go'        => '43',     # 0x2B
+        'head'      => '44',     # 0x2C
+        'i'         => '45',     # 0x2D
+        'img'       => '46',     # 0x2E
+        'input'     => '47',     # 0x2F
+        'meta'      => '48',     # 0x30
+        'noop'      => '49',     # 0x31
+        'prev'      => '50',     # 0x32
+        'onevent'   => '51',     # 0x33
+        'optgroup'  => '52',     # 0x34
+        'option'    => '53',     # 0x35
+        'refresh'   => '54',     # 0x36
+        'select'    => '55',     # 0x37
+        'small'     => '56',     # 0x38
+        'strong'    => '57',     # 0x39
+        'UNUSED'    => '58',     # 0x3A
+        'template'  => '59',     # 0x3B
+        'timer'     => '60',     # 0x3C
+        'u'         => '61',     # 0x3D
+        'setvar'    => '62',     # 0x3E
+        'wml'       => '63',     # 0x3F
+             );
 
-my %WBML_ATTRS = (
-        'accept-charset' => '6',
-	'align="bottom"' => '7',
-	'align="center"' => '8',
-	'align="middle"' => '9',
-	'NULL,' => '10',
-	'align="right"' => '11',
-	'align="top"' => '12',
-	'alt' => '13',
-	'content' => '14',
-	'NULL,' => '15',
-	'domain' => '16',
-	'emptyok="false"' => '17',
-	'emptyok-"true"' => '18',
-	'format' => '19',
-	'height' => '20',
-	'hspace' => '21',
-	'ivalue' => '22',
-	'iname' => '23',
-	'NULL,' => '24',
-	'label' => '25',
-	'localsrc' => '26',
-	'maxlength' => '27',
-	'method="get"' => '28',
-	'method="post"' => '29',
-	'mode="nowrap"' => '30',
-	'mode="wrap"' => '31',
-	'multiple="false"' => '32',
-	'multiple="true"' => '33',
-	'name' => '34',
-	'newcontext="false"' => '35',
-	'newcontext="true"' => '36',
-	'onpick' => '37',
-	'onenterbackward' => '38',
-	'onenterforward' => '39',
-	'ontimer' => '40',
-	'optional="false"' => '41',
-	'optional="true"' => '42',
-	'path' => '43',
-	'NULL,' => '44',
-	'NULL,' => '45',
-	'NULL,' => '46',
-	'scheme' => '47',
-	'sendreferer="false"' => '48',
-	'sendreferer="true"' => '49',
-	'size' => '50',
-	'src' => '51',
-	'ordered="true"' => '52',
-	'ordered="false"' => '53',
-	'tabindex' => '54',
-	'title' => '55',
-	'type' => '56',
-	'type="accept"' => '57',
-	'type="delete"' => '58',
-	'type="help"' => '59',
-	'type="password"' => '60',
-	'type="onpick"' => '61',
-	'type="onenterbackward"' => '62',
-	'type="onenterforward"' => '63',
-	'type="ontimer"' => '64',
-	'NULL,' => '65',
-	'NULL,' => '66',
-	'NULL,' => '67',
-	'NULL,' => '68',
-	'NULL,' => '69',
-	'NULL,' => '70',
-	'type="prev"' => '71',
-	'type="reset"' => '72',
-	'type="text"' => '73',
-	'type="vnd"' => '74',
-	'href' => '75',
-	'href="http://' => '76',
-	'href="https://' => '77',
-	'value' => '78',
-	'vspace' => '79',
-	'width' => '80',
-	'xml:lang' => '81',
-	'NULL,' => '82',
-	'align' => '83',
-	'columns' => '84',
-	'class' => '85',
-	'id' => '86',
-	'forua="false"' => '87',
-	'forua="true"' => '88',
-	'src="http://' => '89',
-	'src="https://' => '90',
-	'http-equiv' => '91',
-	'http-equiv="Content-Type"' => '92',
-	'content="application/vnd.wap.wmlc;charset=' => '93',
-	'http-equiv="Expires"' => '94');
+%WBML_ATTRS = (              # dec           # hex
+        'accept-charset'    => '05',         # 0x05
+        'align="bottom"'    => '06',         # 0x06
+        'align="center"'    => '07',         # 0x07
+        'align="left"'      => '08',         # 0x08
+        'align="middle"'    => '09',         # 0x09
+        'align="right"'     => '10',         # 0x0A
+        'align="top"'       => '11',         # 0x0B
+        'alt'               => '12',         # 0x0C
+        'content'           => '13',         # 0x0D
+        'NULL,'             => '14',         # 0x0E
+        'domain'            => '15',         # 0x0F
+        'emptyok="false"'   => '16',         # 0x10
+        'emptyok="true"'    => '17',         # 0x11
+        'format'            => '18',         # 0x12
+        'height'            => '19',         # 0x13
+        'hspace'            => '20',         # 0x14
+        'ivalue'            => '21',         # 0x15
+        'iname'             => '22',         # 0x16
+        'NULL,'             => '23',         # 0x17
+        'label'             => '24',         # 0x18
+        'localsrc'          => '25',         # 0x19
+        'maxlength'         => '26',         # 0x1A
+        'method="get"'      => '27',         # 0x1B
+        'method="post"'     => '28',         # 0x1C
+        'mode="nowrap"'     => '29',         # 0x1D
+        'mode="wrap"'       => '30',         # 0x1E
+        'multiple="false"'  => '31',         # 0x1F
+        'multiple="true"'   => '32',         # 0x20
+        'name'              => '33',         # 0x21
+        'newcontext="false"' => '34',        # 0x22
+        'newcontext="true"'  => '35',        # 0x23
+        'onpick'            => '36',         # 0x24
+        'onenterbackward'   => '37',         # 0x25
+        'onenterforward'    => '38',         # 0x26
+        'ontimer'           => '39',         # 0x27
+        'optional="false"'  => '40',         # 0x28
+        'optional="true"'   => '41',         # 0x29
+        'path'              => '42',         # 0x2A
+        'NULL,'             => '43',         # 0x2B
+        'NULL,'             => '44',         # 0x2C
+        'NULL,'             => '45',         # 0x2D
+        'scheme'            => '46',         # 0x2E
+        'sendreferer="false"' => '47',       # 0x2F
+        'sendreferer="true"'  => '48',       # 0x30
+        'size'              => '49',         # 0x31
+        'src'               => '50',         # 0x32
+        'ordered="true"'    => '51',         # 0x33
+        'ordered="false"'   => '52',         # 0x34
+        'tabindex'          => '53',         # 0x35
+        'title'             => '54',         # 0x36
+        'type'              => '55',         # 0x37
+        'type="accept"'     => '56',         # 0x38
+        'type="delete"'     => '57',         # 0x39
+        'type="help"'       => '58',         # 0x3A
+        'type="password"'   => '59',         # 0x3B
+        'type="onpick"'     => '60',         # 0x3C
+        'type="onenterbackward"' => '61',    # 0x3D
+        'type="onenterforward"'  => '62',    # 0x3E
+        'type="ontimer"'    => '63',         # 0x3F
+        'NULL,'             => '64',         # 0x40
+        'NULL,'             => '65',         # 0x41
+        'NULL,'             => '66',         # 0x42
+        'NULL,'             => '67',         # 0x43
+        'NULL,'             => '68',         # 0x44
+        'NULL,'             => '69',         # 0x45
+        'type="prev"'       => '70',         # 0x46
+        'type="reset"'      => '71',         # 0x47
+        'type="text"'       => '72',         # 0x48
+        'type="vnd."'       => '73',         # 0x49
+        'href'              => '74',         # 0x4A
+        'href="http://'     => '75',         # 0x4B
+        'href="https://'    => '76',         # 0x4C
+        'value'             => '77',         # 0x4D
+        'vspace'            => '78',         # 0x4E
+        'width'             => '79',         # 0x4F
+        'xml:lang'          => '80',         # 0x50
+        'NULL,'             => '81',         # 0x51
+        'align'             => '82',         # 0x52
+        'columns'           => '83',         # 0x53
+        'class'             => '84',         # 0x54
+        'id'                => '85',         # 0x55
+        'forua="false"'     => '86',         # 0x56
+        'forua="true"'      => '87',         # 0x57
+        'src="http://'      => '88',         # 0x58
+        'src="https://'     => '89',         # 0x59
+        'http-equiv'        => '90',         # 0x5A
+        'http-equiv="Content-Type"' => '91',                   # 0x5B
+        'content="application/vnd.wap.wmlc;charset=' => '92',  # 0x5C
+        'http-equiv="Expires"' => '93',                        # 0x5D
+        'accesskey'         => '94',                        # 0x5E 
+        'enctype'           => '95',                        # 0x5F
+        'enctype="application/x-www-from-urlencoded"' => '96', # 0x60
+        'enctype="multipart/form-data"'               => '97', # 0x61
+      );
 
-my %WBML_VALUES = (
-        '.com/' => '134',
-	'.edu/' => '135',
-	'.net/' => '136',
-	'.org/' => '137',
-	'accept' => '138',
-	'bottom' => '139',
-	'clear' => '140',
-	'delete' => '141',
-	'help' => '142',
-	'http://' => '143',
-	'http://www.' => '144',
-	'https://' => '145',
-	'https://www.' => '146',
-	'NULL' => '147',
-	'middle' => '148',
-	'nowrap' => '149',
-	'onpick' => '150',
-	'onenterbackward' => '151',
-	'onenterforward' => '152',
-	'ontimer' => '153',
-	'options' => '154',
-	'password' => '155',
-	'reset' => '156',
-	'NULL' => '157',
-	'text' => '158',
-	'top' => '159',
-	'unknown' => '160',
-	'wrap' => '161',
-	'www.' => '162');
+%WBML_VALUES = (      # dec              # hex
+        '.com/'     => '133',            # 0x85 
+        '.edu/'     => '134',            # 0x86
+        '.net/'     => '135',            # 0x87
+        '.org/'     => '136',            # 0x88
+        'accept'    => '137',            # 0x89
+        'bottom'    => '138',            # 0x8A
+        'clear'     => '139',            # 0x8B
+        'delete'    => '140',            # 0x8C
+        'help'      => '141',            # 0x8D
+        'http://'   => '142',            # 0x8E
+        'http://www.'  => '143',         # 0x8F
+        'https://'     => '144',         # 0x90
+        'https://www.' => '145',         # 0x91
+        'NULL'      => '146',            # 0x92
+        'middle'    => '147',            # 0x93
+        'nowrap'    => '148',            # 0x94
+        'onpick'    => '149',            # 0x95
+        'onenterbackward' => '150',      # 0x96
+        'onenterforward'  => '151',      # 0x97
+        'ontimer'   => '152',            # 0x98
+        'options'   => '153',            # 0x99
+        'password'  => '154',            # 0x9A
+        'reset'     => '155',            # 0x9B
+        'NULL'      => '156',            # 0x9C
+        'text'      => '157',            # 0x9D
+        'top'       => '158',            # 0x9E
+        'unknown'   => '159',            # 0x9F
+        'wrap'      => '160',            # 0xA0
+        'www.'      => '161');           # 0xA1
 
-my %WBML_NO_CLOSE_TAGS = (
-    'br' => '1',
-	'noop' => '1',
-	'prev' => '1',
-	'img' => '1',
-	'meta' => '1',
-	'timer' => '1',
-    'setvar' => '1');
+
+%WBML_NO_CLOSE_TAGS = (              
+        'br'     => '1',                 
+        'go'     => '1',                 
+        'input'  => '1',                 
+        'noop'   => '1',                 
+        'prev'   => '1',                 
+        'img'    => '1',                 
+        'meta'   => '1',                 
+        'timer'  => '1',                 
+        'setvar' => '1');
 
 # HTML->WML conversion constants
 # Ignore these HTML and iMode tags completely.
@@ -222,23 +235,29 @@ my %IGNORE_TAG = map {$_ => 1} qw(abbr acronym address applet area basefont
 				  tfoot thead var);
 
 # Straightforward one to one tag mapping
-my %TAGMAP = map {$_ => 1} qw(em strong i b u big small table tr td); 
+my %TAGMAP = map {$_ => 1} qw(em strong i b u big small pre tr td); 
 
 
-my (%Open_Tags,$Open_Form_Url,@Open_Vars,%Hidden_Vars);
+my (%Open_Tags,@Open_Tables,$Open_Form_Url,
+    @Open_Vars,%Hidden_Vars,$F_Got_Body_Tag);
 
 
 ### 
 ##  End of global variable setting. 
 ###
 
-sub new {
-    my ($self, $initializer, @param) = @_;
-    $CGI::USE_PARAM_SEMICOLONS++;
-    return $CGI::Q = $self->SUPER::new($initializer, @param);
-}
 
-sub DESTROY { }
+# We don't have a new() method anymore. CGI.pm does everything.
+
+#sub new {
+#    my ($self, $initializer, @param) = @_;
+#    $CGI::DefaultClass = "CGI::WML";
+#    $CGI::USE_PARAM_SEMICOLONS++; # no more foo=bar&amp;fet=yak, just
+#                                  # use foo=bar;fet=yak
+#    
+#    return $CGI::Q = $self->SUPER::new($initializer, @param);
+#}
+
 
 ### Method: header
 # Override the CGI.pm header default with the WML one.
@@ -256,7 +275,13 @@ sub header {
     return $self->SUPER::header("-type"=>$type, %leftover);
 }
 
-
+sub cache { 
+    
+    # The autoloaders get in to recursive loop unless this is overrriden
+    # This means people will have to specify the "Pragma: " header 
+    # manually. XXX fixme.
+    
+}
 
 
 ### Method: start_wml
@@ -535,14 +560,12 @@ sub wml_to_wmlc {
     (defined $errorcontext) || ($errorcontext = 0);
     $parser = new XML::Parser(ErrorContext=>$errorcontext);
 
-    
-    # Stringtable work not done yet.
-    $stringtable = "";
+    $stringtable = build_string_table($parser,$wml);
     
     $WBML_RETBUFF = sprintf("%c%c%c%c%s",
-			    0x01,   # Version number
-			    0x04,   # "Unknown public identifier"
-			    0x6A,   # Charset (UTF-8)
+			    0x01,   # "WBXML 1"
+			    0x04,   # "WML 1.1"
+			    0x6A,   # Charset (UTF-8) XXX make this an option
 			    length($stringtable), # Number of bytes in table
 			    $stringtable);
     
@@ -553,9 +576,13 @@ sub wml_to_wmlc {
                          Final=>\&wml_final);
     
 
-    #$wml =~ s/\r/ /g;
-    #$wml =~ s/\n/ /g;
-    
+    # This is a bit merciless, but it really improves the
+    # string table performance.
+    $wml =~ s/\r//g;
+    $wml =~ s/\n//g;
+    $wml =~ s/\s+\>/\>/g;
+    $wml =~ s/\s+\</\</g;
+
     $testparser = eval '$parser->parse($wml); return 1';
     
     if (!defined $testparser) {
@@ -630,7 +657,7 @@ sub wml_start {
                 if ($WBML_VALUES{$val}) {
                     $WBML_RETBUFF .= chr($WBML_VALUES{$val});
                 } else {
-                    if ($STRTAB{$val}) {
+                    if (defined $STRTAB{$val}) {
                         $WBML_RETBUFF .= pack('CC',
 					    $WBML_STRINGTABLE_REF,
 					    $STRTAB{$val});
@@ -666,8 +693,6 @@ sub wml_end {
 ### 
 # Non-public function, used by wml_to_wmlc 
 # Called by XML parser to encode strings within tags
-# *INCOMPLETE* Ignore the string table stuff, it's incorrect and should
-# not be used.
 ###
 sub wml_char {
     my $parser = shift;
@@ -684,59 +709,110 @@ sub wml_char {
     # add it in as an inline string.
     if  ($charstr !~ /^\s$/) { 
         if ($DOTABLE) {
-            foreach $word (split(' ',$charstr)) {
-                if (defined $STRTAB{$word}) {
-                    $WBML_RETBUFF .=chr($WBML_INLINE_STRING).chr($STRTAB{$word});
-                } else {
-                    $WBML_RETBUFF .=chr($WBML_INLINE_STRING_END).$word.chr(0x00);
-                }
+            if (defined $STRTAB{$charstr}) {
+                $WBML_RETBUFF .= chr($WBML_STRINGTABLE_REF) .
+                                 chr($STRTAB{$charstr});
+            } else {
+                $WBML_RETBUFF .= chr($WBML_INLINE_STRING) .
+                                 $charstr .
+                                 chr($WBML_INLINE_STRING_END);
             }
         } else {
-            $WBML_RETBUFF .= chr(0x03).$charstr.chr(0x00);
+            $WBML_RETBUFF .= chr($WBML_INLINE_STRING) .
+                             $charstr .
+                             chr($WBML_INLINE_STRING_END);
         }
     }
 }
 
-
-sub rearrange {
-    my($order,@param) = @_;
-
-    return () unless @param;
-
-    if (ref($param[0]) eq 'HASH') {
-        @param = %{$param[0]};
-    } else {
-        return @param
-            unless (defined($param[0]) && substr($param[0],0,1) eq '-');
-    }
-
-    # map parameters into positional indices
-    my ($i,%pos);
-    $i = 0;
-    foreach (@$order) {
-        foreach (ref($_) eq 'ARRAY' ? @$_ : $_) { $pos{$_} = $i; }
-        $i++;
-    }
-
-    my (@result,%leftover);
-    $#result = $#$order;  # preextend
-    while (@param) {
-        my $key = uc(shift(@param));
-        $key =~ s/^\-//;
-        if (exists $pos{$key}) {
-            $result[$pos{$key}] = shift(@param);
-        } else {
-            $leftover{$key} = shift(@param);
-        }
-    }
-
-    push (@result,CGI::make_attributes(\%leftover)) if %leftover;
-    @result;
+########
+## String table routines
+########
+    
+sub build_string_table {
+    
+    # Set up the XML parser to make a pass through the 
+    # document whipping out all the strings.
+    
+    my $parser = shift;
+    my $doc  = shift;
+    
+    $parser->setHandlers(Start=>\&accum_string_table,
+                         Char=>\&accum_string_table,
+                         Final=>\&accum_string_final);
+    $parser->parse($doc);
+ 
+    # Note! No 'return()', accum_string_final bounces past this
+    # to the caller. Yuk, I know.
 }
+
+
+sub accum_string_table {
+    
+    # Bash the strings down, and put them in a hash
+
+    my $parser = shift;
+    my $charstr = shift;
+    my @props = @_;
+
+
+    my ($char,$buff,$word,$count);
+
+
+    # Compress and trim whitespace
+    $charstr =~ s/\s+/ /g;
+    $charstr =~ s/^\s+//g;
+    $charstr =~ s/\s+$//g;
+
+    return if ($charstr =~ /^\s$/);
+
+    for ($count = 1 ; $count < scalar(@props); $count+=2) {
+        $charstr =~ s/\s+/ /g;
+        $TEMP_STRTAB{$props[$count]}++;
+    }
+
+    return if (defined $WBML_TAGS{$charstr});
+
+    $TEMP_STRTAB{$charstr}++;
+}
+
+sub accum_string_final {
+    
+    # Build the string table, and the token stream header.
+    my ($word,$occurances,$count,$stringtable,%temptable);
+
+    $stringtable = ""; # Stop "use of uninitialized value..."
+    $count = 0;
+
+    # Only use stringtable where there is a saving, i.e. the string
+    # is used 2 or more times in the code, and it's over two chars,
+    # since that is the length of a stringtable reference anyway.
+
+    while (($word,$occurances) = each %TEMP_STRTAB) {
+       if ( ($occurances >= 2) && (length($word) > 2) ) {
+           $STRTAB{$word} = 1;
+       }
+    }
+
+
+    while (($word,$occurances) = each %STRTAB) {
+        $STRTAB{$word} = length($stringtable); # For index purposes.
+        $stringtable .= $word . chr(0x00);
+        $count++;
+    }
+    
+    # Horror. This is the last return, so the wml_to_wmlc() function gets
+    # this value even though it was not called from there, but even
+    # so I'll have to work out a better way of getting it back.
+    return $stringtable;
+}
+
+
 
 
 ###
 # HTML to WML conversion, not particularly good conversion though. YMMV
+#
 # Inspired by Taneli Leppa's "html2wml" distributed with the
 # Kannel Open Source WAP gateway.
 ###
@@ -752,7 +828,7 @@ sub html_to_wml {
 
     ($redirect_via = "0") if (!defined $redirect_via);
     ($redirect_var = "0") if (!defined $redirect_var);
-    ($breaks_after_links = 0) if (!defined $breaks_after_links);
+    ($breaks_after_links = "0") if (!defined $breaks_after_links);
 
     if (ref($arg) and UNIVERSAL::isa($arg, 'IO::Handler')) {
         # We've got a filehandle.
@@ -786,10 +862,18 @@ sub html_to_wml {
 
         print $ioref $arg || croak ($!);
         $ioref->close;
+	
         open($ioref,$tmp) || croak ($!);
+	html_to_wml_gettables($ioref);
+	$ioref->close;
+
+	open($ioref,$tmp) || croak ($!);
     }
 
+    #html_to_wml_gettables($ioref);
+
     $parser = HTML::TokeParser->new($ioref);
+   
    
     $parser->get_tag("title");
     $title = $parser->get_text;
@@ -801,8 +885,33 @@ sub html_to_wml {
     
 }
 
+###
+# Non-public function, used by 'html_to_wml' routine
+# Extract tables in document on to global so we can reformat them
+# properly.
+###
+sub html_to_wml_gettables{
+
+    my $ioref = shift;
+    undef @Open_Tables;
+    my ($te,$table,$row,$cellcontent,$tmp); 
+    
+    $te = new HTML::TableExtract();
+    $te->parse_file($ioref);
+
+
+    foreach $table ($te->table_states) {
+        $tmp = sprintf("<table columns='%d'>", (scalar $table->rows));
+	push @Open_Tables,$tmp;
+    }
+}
+
+
+
+
+
 ### 
-# Non-public function, used by 'convert' routine, extracts 
+# Non-public function, used by 'html_to_wml' routine, extracts 
 # text and does limited tag conversion.
 ###
 sub html_to_wml_getcontent {
@@ -814,7 +923,7 @@ sub html_to_wml_getcontent {
     my $breaks_after_links = shift;
     my ($wml,$wmlbit,$token,$tag);
     
-
+    $F_Got_Body_Tag = 0;
     while ($token = $p->get_token) {
 	if ($token->[1]) {
 	    $_ = $token->[0];
@@ -836,6 +945,7 @@ sub html_to_wml_getcontent {
 		      };
 	  }  
 	}
+	#print STDERR "\n\tXX $wmlbit\n";
         $wml .= $wmlbit if $wmlbit;
     }
     
@@ -844,7 +954,11 @@ sub html_to_wml_getcontent {
             $wml .="</$tag>";
         }
     }
-    $wml .= "</p>";
+
+    # In case we got plain text...
+    if ($F_Got_Body_Tag == 1) {
+	$wml .= "</p>";
+    }
     
     return $wml;
 }
@@ -864,13 +978,23 @@ sub _start_tag {
     if ($breaks_after_links) {
         $breaks_after_links = "<br/>\n";
     }else{
-        $breaks_after_links = "";
+        $breaks_after_links = " ";
     }
 
     my ($y,$x,$type,$varname,%pfs);
 
 
-    return "<p>" if (lc($tag) eq "body");
+    # We have to check for duplicate "<body>" tags.
+    if (lc($tag) eq 'body') {
+	if ($F_Got_Body_Tag == 0) {
+	    $F_Got_Body_Tag = 1;
+	    return "<p>";
+
+	}else{
+	    return "";
+	}
+    }
+	
 
     return if $IGNORE_TAG{$tag};
     
@@ -889,8 +1013,16 @@ sub _start_tag {
 	# Tag-to-tag mapping.
 
         /^a$/ && do {
+            if (!defined $attrs->{'href'}) {
+                # <a name='foo> probably
+                return "";
+            }
             $y = $attrs->{'href'};
 	    $y =~ s%&%&amp;%g;
+
+            if ($y !~ /^http/) {
+                $y = "_URIBASE_" . $y;
+            }
 
             if (defined $redirect_via) {
                  $y = qq($redirect_via?$redirect_var=$y);
@@ -941,7 +1073,16 @@ sub _start_tag {
 			 $p->get_text);
 	};
 
-
+	/^table$/ && do {
+	    # Becase of the requirement in WML for the <table> tag to
+            # contain the column count <table columns='4'> we have
+            # previous to this routine in html_to_wml_gettables()
+            # made an array of the table tags in the order they appear
+            # in the document. We return the first one in the array and
+            # shorten the array.
+	    $y = shift @Open_Tables;
+	    return $y;
+	};
 
 	/^input$/ && do {
 
@@ -962,6 +1103,10 @@ sub _start_tag {
 
 	    
 	    ($type eq "submit") && do{
+    
+                # It's a submit. Collapse all the form bits we've got
+                # so far in to a WML 'go'
+
 		my $url = $Open_Form_Url;
 
 		foreach $varname (@Open_Vars) {
@@ -1002,12 +1147,13 @@ sub _end_tag {
     }
     
     for ($tag) {
-	/^a$/     && return "</a>";
-	/^p$/     && return "<br/>";
-	/^h[0-9]/ && return "<br/>";
+	/^a$/     && return "</a>";     # This block looks a bit silly, but
+	/^p$/     && return "<br/>";    # I need it here to have better control
+	/^h[0-9]/ && return "<br/>";    # over the tag mapping.
 	/^dl$/    && return "<br/>";
 	/^li$/    && return "<br/>";
 	/^select$/&& return "</select>";
+	/^table$/ && return "</table>";
     }
     
     
@@ -1016,16 +1162,145 @@ sub _end_tag {
 
 
 
+# Here is the AUTOLOAD to save some work on making standard tags.  This is 
+# inspired by the work done by LDS in CGI.pm.  Here we check to see if the
+# AUTOLOAD is a valid WML tag.  If it is we pass it to the private function
+# _make_tags.  If it is not a valid WML tag we pass the call to CGI.pm's
+# AUTOLOAD method.  So simple I think I am doing something wrong.  I may
+# be adding other AUTOLOAD methods here at a later date. 
+#
+#  Added by AJM 06 July 2000.
+
+sub AUTOLOAD {
+
+    $CGI::AUTOLOAD_DEBUG = 0;
+    print STDERR "CGI::WML::AUTOLOAD for $AUTOLOAD\n" if $CGI::AUTOLOAD_DEBUG;
 
 
+    $AUTOLOAD =~ s/.*:://;
+
+    if ($WBML_TAGS{$AUTOLOAD}) {
+        _make_tags($AUTOLOAD, @_);
+    }
+    else {
+        my $func = $CGI::AUTOLOAD;
+        goto &$func;
+    }
+}
 
 
+# If AUTOLOAD is called for a valid WML tag, this is where it is made.  
+# first we clean up the array we are sent to make sure the first element
+# is not a ref to an object.  Next we make sure the last element is a real
+# value we can work with.  If there is only one element in the array after 
+# that we can assume that it is the content for the tag.  If there is an even 
+# number of elements in the array then we assume that it is in the form
+#
+#     attribute_name value attribute_name value
+#
+# so we pass that to the private function _make_attrib which will give us
+# back a hash of the with the attribute_name as the key and the following
+# value as the value.  Finally we find out if the tag is an empty tag or
+# not and print out the correct mark up for the tag.  The value of
+# $attribs{content} is always between the opening and closing tags on
+# containter tags, it is never an attribute of a tag.
+#
+#  Added by AJM 06 July 2000
+
+sub _make_tags {
+
+    my $tag = shift;
+
+    my (%attribs, $ret);
+
+    my @p = @_;
+
+    if (@p) {
+        if ( ref($p[0]) ) {
+            shift @p;
+        }
+        unless (defined $p[$#p]){
+            pop @p;
+        }
+    }
+
+    my $pc = @p;
+
+    #  here for debugging only
+    #for (my $i = 0; $i < $pc; $i++) { print "p_ref[$i] is \'$p_ref[$i]\'\n"; }
+
+    
+
+    if (@p) {
+        if ($pc == 1) { 
+            $attribs{'content'} = $p[0];
+        }
+        elsif ( ($pc % 2) == 0 ) {
+            _make_attrib(\%attribs, \@p)  ;
+        }
+        else {
+            croak("Error: The attribs for $tag has an odd count.");
+        }
+    }
+
+    if ($WBML_NO_CLOSE_TAGS{$tag} ) {
+        $ret = qq (\L<$tag\E);
+        foreach (keys %attribs) {
+            $ret .= qq (\L$_="$attribs{$_}");
+        }
+        $ret.= qq( />\n);
+            
+        return $ret;
+    }
+    else {
+
+        $ret = qq (\L<$tag\E ) ;
+        foreach (keys %attribs) { $ret .= qq (\L$_="$attribs{$_}" )  unless $_ eq 'content'; }
+        $ret .= qq (>);
+        $ret .= qq($attribs{'content'}) if $attribs{'content'};            
+        $ret .= qq(\L</$tag>\E\n);
+           
+        return $ret;
+    }
+}
+
+# This is a private function that makes a hash of the attributes for a tag
+# that will be AUTOLOADed.  It takes a ref to an array, cleans up the array, 
+# then iterates over the array putting the attribute name as the hash key 
+# and the attib value as the value of the key.  (kind of a no brainer,
+# huh? :-) 
+# The hash is passed back and forth by reference.
+#
+# Added by AJM 06 July 2000.
+
+sub _make_attrib {
+
+    my $attribs_ref = shift;
+    my @p_ref = shift;
+
+    my $ac = @$p_ref;
+
+    #  here for debugging only
+    #print "ac => $ac \n"; 
+
+    
+    if ($attribs_ref) {
+        if ( ref(@$p_ref[0]) ) { shift @$p_ref; }
+        unless (defined @$p_ref[$#p_ref]){ pop @p_ref; }
+    }
+
+    #  here for debugging only
+    #for (my $i = 0; $i < $ac; $i++) { print "p_ref[$i] is \'@$p_ref[$i]\'\n"; }
 
 
-
-
-
-
+    for (my $i = 0; $i < @$p_ref; $i++) {
+        my $j = $i+1;
+        if (substr(@$p_ref[$i],0,1) eq '-') {
+            @$p_ref[$i] =~ s/^-//;
+            $attribs_ref->{@$p_ref[$i]} = @$p_ref[$j];
+        } 
+    }
+}
 
 
 
@@ -1048,25 +1323,22 @@ CGI::WML - Subclass LDS's "CGI.pm" for WML output and WML methods
 
   use CGI::WML;
 
-  $q = new CGI::WML;
+  $query = new CGI::WML;
 
   print
-     $q->header(),
-     $q->start_wml(),
-     $q->template(-content=>$q->prev()),
-     $q->card(-id=>"first_card",
+     $query->header(),
+     $query->start_wml(),
+     $query->template(-content=>$query->prev()),
+     $query->card(-id=>"first_card",
               -title=>"First card",
               -content=>"<p>Hello WAP world!</p>"),
-     $q->card(-id=>"second",
-              -title=>"Second Card",
-              -content=>"<p>I am No2</p>"),
-     $q->end_wml();
+     $query->end_wml();
 
   print
-     $q->wml_to_wmlc(-wml=>$wml_buffer,
-                     -errorcontext=>2);
+     $query->wml_to_wmlc(-wml=>$wml_buffer,
+                         -errorcontext=>2);
 
-  ($title,$content) = $query->html_to_wml($buffer);
+  ($page_title,$content) = $query->html_to_wml($buffer);
 
  
 
@@ -1102,13 +1374,7 @@ print $query->header();
 
 	-or-
 print $query->header(-expires=>"+1m",
-                     -cookie($q->cookie(-name=>"example",
-                                        -value=>"123"),
-                     -nph=>1);
-
-WARNING: If you are mixing HTML and WML output in the same script you'll 
-need to explicity set "text/html" as the content type where appropriate.
-This is a change from pre 1.52 versions.
+                     -Refresh=>'20; URL='/newplace.wml');
 
 
 =item B<start_wml()>
@@ -1118,12 +1384,12 @@ XML language value and any 'META' information. If a DTD is not specified
 then the default is to use C<WML 1.1>
 
 
-$query->start_wml(-dtd      =>'-//WAPFORUM//DTD WML 5.5//EN',
+$query->start_wml(-dtd      => '-//WAPFORUM//DTD WML 5.5//EN',
                   -dtd_url  => 'http://www.wapforum.org/DTD/wml_5.5.xml',
-                  -lang     =>"en-gb",
-                  -encoding =>"iso-8859-1",
-                  -meta     =>{'scheme'=>'foobar',
-                               'name'  =>'mystuff'});
+                  -lang     => 'en-gb',
+                  -encoding => 'iso-8859-1',
+                  -meta     => {'scheme'=>'foobar',
+                                'name'  =>'mystuff'} );
 
 =item B<end_wml()>
 
@@ -1150,13 +1416,16 @@ $query->card(-id=>"card_id",
              -onenterbackward=>"#othercard",
              -content=>"<p>Hello WAP world</p>");
 
+The 'ID' and 'Content' elements are manditory, and have no defaults. All
+other parameters are optional.
+
 =head2 TEMPLATES
 
 The template() method creates a template for placing at the start
 of a card. If you just need to add a B<back> link, use the prev()
 method.
 
-$query->template(-content=>$q->prev(-label=>"Go Back"));
+$query->template(-content=>$query->prev(-label=>"Go Back"));
 
 =head2 TIMERS
 
@@ -1259,7 +1528,7 @@ An image can be created with the following attributes:
            is passed as a percent the resulting image size will be
            relative to the amount of available space, not the image size.
 
-my $img = $q->img(
+my $img = $query->img(
                  -src      => '/icons/blue_boy.wbmp',
                  -alt      => 'Blue Boy',
                  -localsrc => '$var',
@@ -1269,51 +1538,10 @@ my $img = $q->img(
                  -height   => '15',
                  -width    => '10');
 
-I<NOTE> the Unwired Planet (UP) browser 3.1 from Phone.com uses the
-HDML mark up to display images.  HDML is a propritarty mark up
-developed by Unwire Planet so it could be first to market with
-Wireless Internet.  UP browsers are (AFAIK) the only ones supporting
-this mark up.  Currently (May 2000) all Motorola phones are using this
-browser.  Ericsson and Motorla will be deploying the UP 4.0 browser on
-future devices.  Nokia has it's own 100% WAP 1.1 compliant browser
-that will be deployed on all future Nokia devices.
-
 I<NOTE> the B<localsrc> element, and formatting elements are not supported
 consistently by the current generation of terminals, however they B<should>
 simply ignore the attributes they do not understand.
 
-
-=head2 P
-
-A paragraph can be created with the following attributes
-
-align  (left|right|center)
-
-This attribute specifies the text alignment mode for the
-paragraph. Text can be centre aligned, left aligned or right aligned
-when it is displayed to the user. Left alignment is the default
-alignment mode. If not explicitly specified, the text alignment is set
-to the default alignment.
-
-mode   (wrap|nowrap)
-
-This attribute specifies the line-wrap mode for the paragraph. Wrap
-specifies breaking text mode and nowrap specifies non-breaking text
-mode. If not explicitly specified, the line-wrap mode is identical to
-the line-wrap mode of the previous paragraph in the text flow of a
-card. The default mode for the first paragraph in a card is wrap.
-
-
-    content   
-
-my $p = $q->p( -align    => 'center',
-               -mode     => 'nowrap',
-               -content  => 'This is a paragraph');
-
-If you are not going to use the align or mode attributes you can call
-it like this:
-
-my $p = $q->p("This is content");
 
 
 =head2 Dial Tags
@@ -1321,8 +1549,8 @@ my $p = $q->p("This is content");
 When using cell phones in WAP you can make calls.  When a dial tag is
 selected the phone drops out of the WAP stack and into what ever is the 
 protocol used for phone calls.  At the conclusion of the call the phone 
-returns to the WAP stack in the same place that you linked to the phone
-number.  
+I<should> return to the WAP stack in the same place that you linked to
+the phone number.  
 
 The tag looks much like a regular link, but has some special syntax.  
 
@@ -1332,24 +1560,73 @@ $query->dialtag(-label =>"Joe's Pizza",
 The recieving terminal must support WTAI for this link to work.
 
 
+=head1 WML SHORTCUTS
+
+I<p> I<b> I<br> I<table> etc. etc. Just like the original CGI.pm, this
+module includes functions for creating correct WML by calling methods of
+a query object.
+
+WML Shortcuts may be called in two ways; 
+
+With a single parameter, which will be the content of the tag, for
+example;
+
+       Perl code                           WML Result
+     ---------------------            ---------------------
+     $query->b("Bold text);               <b>bold</b>
+     $query->p("Hello");                  <p>Hello</p>
+
+     $query->p($query->b("Hello"));       <p><b>Hello</b></p> 
+
+     $query->br();                        <br/> # "No-close" tags are
+                                                # automatically dealt with
+
+
+Alternatively, they can be called with a list of arguments, specifying
+content and attibutes.
+
+      Perl code                           WML Result
+      ---------------------            ---------------------
+      $query->p(-align=>"left",        <p align="left">Hi there</p>
+                -content=>"Hi there");
+
+      
+ When being called with the second syntax, the 'content' parameter
+ specifies the content of tags. 
+
+ All WML 1.1 tags are available via this method.
+
+
 =head1 COMPILING WML DECKS
  
 
 $query->wml_to_wmlc(-wml=>$buffer,
-                    -errorcontext=>2);
+                    -errorcontext=>2);  # default 0
 
-A fairly good WML to WBML converter/compiler is included for convinience
-purposes, although it is not intended to replace the compiler on the WAP
-gateway it may prove useful.
+A WML to WBXML converter/compiler is included for convinience purposes,
+although it is not intended to replace the compiler on the WAP
+gateway it may prove useful, for example measuring what the compiled
+document size will be.
+
+     $size = length($query->wml_to_wmlc(-wml=>$wml,
+                                        -errorcontext=>0));
+
+=over 4
+
+I<NOTE> WBXML string tables are used to compress the document size down as small
+as possible, giving excellent document size performance. Because of this
+though, the size returned by the function may be smaller than the size
+of the WBXML document created by the WAP gateway. Turning this feature
+off will be an option in future releases.
+
+=back
 
 The function takes two arguments, a buffer of textual WML and an optional
 argument specifiying that should the XML parser fail then X many lines of
 the buffer before and after the point where the error occured will be printed
-to show the context of the error.
-
+to show the context of the error. 
 
 =head2 ERRORCONTEXT
-
 I<WARNING> Setting this to any non-zero value will cause your program to
 exit if the routine is passed WML which is not "well formed" this is due
 to the fact that XML::Parser calls die() upon such events.
@@ -1360,6 +1637,7 @@ returns undef upon failiure and issues a warning, anything other than
 undef indicates success.
 
 =head1 HTML TO WML CONVERSION
+
 
 ($title,$content) = $query->html_to_wml($buffer);
 
@@ -1377,22 +1655,35 @@ The main purpose of this function is for converting server error messages
 and the "Compact HTML" used on "I-Mode" systems to readable WML, not for
 general page translation.
 
+Potential users of this function are encouraged to read the source to this
+module to gain a better understanding of the underlying mechanics of the
+translation.
+
 =back
 
 
 =head1 AUTHOR
 
-Angus Wood <angus@z-y-g-o.com>, with additions and improvements by Andy Murren <amurren@oven.com>
+Angus Wood <angus@z-y-g-o.com>, with loads of additions and improvements by Andy Murren <amurren@oven.com>
 
 =head1 CREDITS
 
-=item Wilbert Smits <wilbert@telegraafnet.nl> for the header() function
-      content-type override.
+=item Wilbert Smits <wilbert@telegraafnet.nl> for the header() function content-type override.
 
 =head1 SEE ALSO
 
 perl(1), perldoc CGI, tidy(1)
 
 =cut
+
+
+
+
+
+
+
+
+
+
 
 

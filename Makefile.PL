@@ -24,7 +24,7 @@ THERE
         while ($res !~ /^(y|n|q)/i) {
             $res = prompt("Remove XML::Parser dependency? [Yes/No/Quit]:");
         }
-        exit(1) if ($res =~ /q/i);
+        exit(1) if ($res =~ /^q/i);
         if ($res =~ /n/) {
             print <<THERE
 Ok, leaving dependency in. Install XML::Parser before running 'make'
@@ -43,10 +43,21 @@ THERE
     
     if ($usexml) {
         $prereq =  { 'CGI' => '2.68',
+                     'HTML::Parser' => '0',
+                     'HTML::TokeParser' => '0',
+                     'HTML::TableExtract' => '0',
+                     'IO::Handle' => '0',
+                     'IO::File' => '0',
                      'XML::Parser' => '0'};
     }else{
         remdep();
-        $prereq =  { 'CGI' => '2.68' }
+        $prereq =  { 'CGI' => '2.68',
+                     'HTML::Parser' => '0',
+                     'HTML::TokeParser' => '0',
+                     'HTML::TableExtract' => '0',
+                     'IO::Handle' => '0',
+                     'IO::File' => '0'
+                    }
     }
     
     return ($prereq);

@@ -18,5 +18,6 @@ while(<IN>) {$buffer .= $_;}
 close(IN);
 ($title,$wml) = $q->html_to_wml(-html=>$buffer,
                                 -linkbreaks=>1);
+
 defined $wml && print "ok 3\n";
 

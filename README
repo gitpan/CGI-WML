@@ -12,7 +12,8 @@ Copying:
     terms as Perl itself.
 
 Prerequisites:
-    perl 5.002, CGI.pm and XML::Parser
+    perl 5.004, CGI.pm, HTML::Parser, HTML::TokeParser, HTML::TableExtract
+    and XML::Parser
    
     The XML::Parser dependancy can be removed at compile-time.
 
@@ -30,8 +31,6 @@ Planned Enhancements:
     Add support for /all/ attributes defined in the WML DTD, I think
     I've covered the most important ones already, but it's nice to 
     be complete.
-
-    String tables in WBXML compiler.
 
     Better HTML to WML conversion.
     

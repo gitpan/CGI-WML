@@ -1,4 +1,4 @@
-Revision history for Perl extension CGI::WAP.
+Revision history for Perl extension CGI::WML.
 
 0.01  Thu Feb 10 17:04:26 2000
         - original version; created by h2xs 1.19
@@ -26,7 +26,7 @@ Revision history for Perl extension CGI::WAP.
           Wilbert Smits <wilbert@telegraafnet.nl>
 
 1.54  2000/06/03
-        - Added Andy's 'img' tag routine, and POD, and Andy's 'dialtag' POD
+        - Added Andy Murren's 'img' tag routine, and POD, and 'dialtag' POD
         - Removed code which tried to sidestep the XML::Parser dependancy, it
           didn't work anyway.
 
@@ -37,5 +37,30 @@ Revision history for Perl extension CGI::WAP.
           problems accross installations.
 
 1.56  2000/06/25
-	- Added in Andy's "p" method and POD documentation.
-	- Added first implementation of cHTML to WML converter.
+	- Added in Andy Murren's "p" method and POD documentation.
+	- Added first implementation of C-HTML to WML converter.
+        - Added module to CPAN as CGI::WML-0.01
+
+1.57  2000/07/01
+        - Rewrote C-HTML -> WML stuff.
+        - Added module to CPAN as CGI::WML-0.02
+
+1.58  2000/07/07
+        - Corrected WBXML constants by Andy Murren <amurren@oven.com>
+        - String table support in WBXML compiler. Compiler now is as good
+          as, or within 1 byte of, Nokia's WBXML compiler.
+        - POD updates.
+        - Added option to disable XML::Parser dependancy at install-time.
+        - Improved HTML->WML conversion slightly.
+
+1.59  2000/07/14
+	- Added table handling routine to html_to_wml conversion.
+
+1.60  2000/07/16
+	- Added in Andy Murren's AUTOLOAD code, now you can print
+          $q->p("paratext") and use any WML tag as an object method.
+	- Rearrenged object inheretance, allowed removal of new() method.
+
+1.61  2000/07/16
+	- Documentation changes, added POD for AUTOLOADed stuff.
+        - Added module to CPAN as CGI::WML-0.03
