@@ -4,19 +4,14 @@ use vars qw($VERSION $RCSVERSION @ISA @EXPORT @EXPORT_OK $USEXMLPARSER
             %WBML_TAGS %WBML_ATTRS %WBML_VALUES %WBML_NO_CLOSE_TAGS
             $AUTOLOAD @ISA @EXPORT @EXPORT_OK);
 
-$USEXMLPARSER=1;
-
+$USEXMLPARSER=0;
 
 use HTML::TokeParser;
 use HTML::TableExtract;
 use IO::Handle;
 use IO::File;
 use Carp;
-#use strict;
-#no strict 'subs'; # not that strict really :-|
-#no strict 'vars';
 require Exporter;
-
 
 # Big fat manual import list, since the 'header' routine is in the :cgi pack,
 # but we define our own, and we have to avoid the 'sub foo redefined..' warning
@@ -32,31 +27,25 @@ use CGI qw(:internal :ssl param upload path_info path_translated url self_url
 
 use CGI::Util qw(rearrange make_attributes unescape escape expires);
 
-
 if ($USEXMLPARSER) {
     require XML::Parser;
     import XML::Parser;
 }
 
-
-@ISA = qw(Exporter CGI CGI::Util);  # Inheret from CGI.pm
-
-
-
-
+@ISA = qw(Exporter CGI CGI::Util);  # Inherit from CGI.pm
 
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
 @EXPORT = qw();
 
-$VERSION = "0.05";
-$RCSVERSION = do{my@r=q$Revision: 1.64 $=~/\d+/g;sprintf '%d.'.'%02d'x$#r,@r};
+$VERSION = "0.06";
+$RCSVERSION = do{my@r=q$Revision: 1.65 $=~/\d+/g;sprintf '%d.'.'%02d'x$#r,@r};
 
 my $DEFAULT_DTD     = '-//WAPFORUM//DTD WML 1.1//EN';
 my $DEFAULT_DTD_URL = 'http://www.wapforum.org/DTD/wml_1.1.xml';
 
-my $DOTABLE = 1; # Wether to use string tables.
+my $DOTABLE = 1; # Whether to use string tables.
 my ($WBML_RETBUFF,%TEMP_STRTAB,%STRTAB);
 
 # Wireless Binary Markup Language, as defined in WAP forum docs
@@ -66,7 +55,6 @@ my $WBML_STRINGTABLE_REF   = 0x83;
 my $WMLTC_ATTRIBUTES       = 0x80;
 my $WMLTC_CONTENT          = 0x40;
 my $WMLTC_END              = 0x01;
-
  
 %WBML_TAGS = (      # dec      # hex 
         'pre'       => '27',     # 0x1B
@@ -199,8 +187,8 @@ my $WMLTC_END              = 0x01;
         'http-equiv="Content-Type"' => '91',                   # 0x5B
         'content="application/vnd.wap.wmlc;charset=' => '92',  # 0x5C
         'http-equiv="Expires"' => '93',                        # 0x5D
-        'accesskey'         => '94',                        # 0x5E 
-        'enctype'           => '95',                        # 0x5F
+        'accesskey'         => '94',                           # 0x5E 
+        'enctype'           => '95',                           # 0x5F
         'enctype="application/x-www-from-urlencoded"' => '96', # 0x60
         'enctype="multipart/form-data"'               => '97', # 0x61
       );
@@ -208,7 +196,7 @@ my $WMLTC_END              = 0x01;
 %WBML_VALUES = (      # dec              # hex
         '.com/'     => '133',            # 0x85 
         '.edu/'     => '134',            # 0x86
-        '.net/'     => '135',            # 0x87
+        '.net/'     => '135',            # 0x87 
         '.org/'     => '136',            # 0x88
         'accept'    => '137',            # 0x89
         'bottom'    => '138',            # 0x8A
@@ -236,7 +224,6 @@ my $WMLTC_END              = 0x01;
         'wrap'      => '160',            # 0xA0
         'www.'      => '161');           # 0xA1
 
-
 %WBML_NO_CLOSE_TAGS = (              
         'br'     => '1',                 
         'go'     => '1',                 
@@ -260,27 +247,12 @@ my %IGNORE_TAG = map {$_ => 1} qw(abbr acronym address applet area basefont
 # Straightforward one to one tag mapping
 my %TAGMAP = map {$_ => 1} qw(em strong i b u big small pre tr td); 
 
-
 my (%Open_Tags,@Open_Tables,$Open_Form_Url,
     @Open_Vars,%Hidden_Vars,$F_Got_Body_Tag);
-
 
 ### 
 ##  End of global variable setting. 
 ###
-
-
-# We don't have a new() method anymore. CGI.pm does everything.
-
-#sub new {
-#    my ($self, $initializer, @param) = @_;
-#    $CGI::DefaultClass = "CGI::WML";
-#    $CGI::USE_PARAM_SEMICOLONS++; # no more foo=bar&amp;fet=yak, just
-#                                  # use foo=bar;fet=yak
-#    
-#    return $CGI::Q = $self->SUPER::new($initializer, @param);
-#}
-
 
 ### Method: header
 # Override the CGI.pm header default with the WML one.
@@ -298,7 +270,6 @@ sub header {
     if(!defined $type) {$type = "text/vnd.wap.wml"}
     return $self->SUPER::header("-type"=>$type, %leftover);
 }
-
 
 ### Method: start_wml
 # Guess what this does!
@@ -334,7 +305,6 @@ sub start_wml {
     return join(" ",@result);
 }
 
-
 ### Method: card
 # make a complete WML card
 ####
@@ -361,9 +331,7 @@ sub card {
     push(@ret,qq( $content </card>)) if (defined $content);
 
     return join (" ",@ret);
-    
 }
-
 
 ### Method: dialtag
 # make a 'call this number' tag
@@ -376,7 +344,6 @@ sub dialtag {
     my $ret = "<anchor>$label<go href='wtai://wp/mc/;$number'/></anchor>";
     return $ret;
 }
-
 
 ### Method: do
 # make a 'do' tag
@@ -397,7 +364,6 @@ sub do {
 
     return join(" ",@ret);
 }
-
     
 ### Method: template
 # make a 'template' card for a deck
@@ -450,7 +416,6 @@ sub prev {
     $ret =~ s/Back/$label/ if (defined $label);
     
     return $ret;
-
 }
 
 sub back {
@@ -466,7 +431,6 @@ sub timer {
     
     return qq(<timer name="$name" value="$value"/>);
 }
-
 
 #### Method: end_wml
 # End an WML document.
@@ -501,7 +465,6 @@ sub input {
     return join(" ",@ret);
 }
 
-
 #### Method: onevent
 # Make an "onevent" block
 ####
@@ -513,7 +476,6 @@ sub onevent {
 
     return qq(<onevent type="$type">$content</onevent>);
 }
-
 
 ### Method: img
 # make an image tag
@@ -536,7 +498,6 @@ sub img {
     push (@ret,qq(width="$width"))       if (defined $width);
     push (@ret,qq( />));
     return join(" ",@ret);
-
 }
 
 sub p {
@@ -551,11 +512,6 @@ sub p {
     push ( @ret, qq(>$content</p>));
     return join (" ", @ret);  
 } 
-
-
-
-
-
 
 #### Method: wml_to_wmlc
 # Convert textal WML to binary WML, not indented to replace the WML
@@ -584,13 +540,11 @@ sub wml_to_wmlc {
 			    0x6A,   # Charset (UTF-8) XXX make this an option
 			    length($stringtable), # Number of bytes in table
 			    $stringtable);
-    
 
     $parser->setHandlers(Start=>\&wml_start,
                          End=>\&wml_end,
                          Char=>\&wml_char,
                          Final=>\&wml_final);
-    
 
     # This is a bit merciless, but it really improves the
     # string table performance.
@@ -762,7 +716,6 @@ sub build_string_table {
     # to the caller. Yuk, I know.
 }
 
-
 sub accum_string_table {
     
     # Bash the strings down, and put them in a hash
@@ -771,9 +724,7 @@ sub accum_string_table {
     my $charstr = shift;
     my @props = @_;
 
-
     my ($char,$buff,$word,$count);
-
 
     # Compress and trim whitespace
     $charstr =~ s/\s+/ /g;
@@ -810,7 +761,6 @@ sub accum_string_final {
        }
     }
 
-
     while (($word,$occurances) = each %STRTAB) {
         $STRTAB{$word} = length($stringtable); # For index purposes.
         $stringtable .= $word . chr(0x00);
@@ -822,9 +772,6 @@ sub accum_string_final {
     # so I'll have to work out a better way of getting it back.
     return $stringtable;
 }
-
-
-
 
 ###
 # HTML to WML conversion, not particularly good conversion though. YMMV
@@ -856,7 +803,6 @@ sub html_to_wml {
         };
     }
 
-
     if (! defined $ioref ) {
         # We've got a scalar, put it in a tempfile.
 	
@@ -866,7 +812,7 @@ sub html_to_wml {
         my $seqno = unpack("%16C*",join('',localtime,values %ENV));
 
         for (my $cnt=10;$cnt>0;$cnt--) {
-            next unless $tmpfile = new TempFile($seqno);
+            next unless $tmpfile = new CGITempFile($seqno);
             $filename = $tmpfile->as_string;
 
             last if defined ($ioref = new IO::File "> $filename");
@@ -898,8 +844,6 @@ sub html_to_wml {
                                        $redirect_var,$breaks_after_links);
     (-e $filename) && (unlink($filename) || warn("Couldn't unlink $filename"));
     return ($title,$content);
-    
-    
 }
 
 ###
@@ -922,10 +866,6 @@ sub html_to_wml_gettables{
 	push @Open_Tables,$tmp;
     }
 }
-
-
-
-
 
 ### 
 # Non-public function, used by 'html_to_wml' routine, extracts 
@@ -1003,25 +943,25 @@ sub _start_tag {
 
     # We have to check for duplicate "<body>" tags.
     if (lc($tag) eq 'body') {
-	if ($F_Got_Body_Tag == 0) {
-	    $F_Got_Body_Tag = 1;
-	    return "<p>";
+	    if ($F_Got_Body_Tag == 0) {
+	        $F_Got_Body_Tag = 1;
+	        return "<p>";
 
-	}else{
-	    return "";
-	}
+	    }
+        else {
+	        return "";
+	    }
     }
-	
 
     return if $IGNORE_TAG{$tag};
     
     if ($TAGMAP{$tag}) {
         if ( (defined $Open_Tags{$tag}) && ($Open_Tags{$tag} > 1)) {
-	    $Open_Tags{$tag}++;
-	    return lc("</$tag><$tag>");
+	        $Open_Tags{$tag}++;
+	        return lc("</$tag><$tag>");
         }else{
-	    $Open_Tags{$tag}++;
-	    return lc("<$tag>");
+	        $Open_Tags{$tag}++;
+	        return lc("<$tag>");
         }
     }
     
@@ -1118,7 +1058,6 @@ sub _start_tag {
 				    -maxlength=>$attrs->{'maxlength'});
 	    };
 
-	    
 	    ($type eq "submit") && do{
     
                 # It's a submit. Collapse all the form bits we've got
@@ -1151,7 +1090,6 @@ sub _start_tag {
 sub _end_tag {
     
     my $tag = shift;
-       
 
     return if $IGNORE_TAG{$tag};
 
@@ -1169,12 +1107,7 @@ sub _end_tag {
 	/^select$/&& return "</select>";
 	/^table$/ && return "</table>";
     }
-    
-    
 }
-
-
-
 
 # Here is the AUTOLOAD to save some work on making standard tags.  This is 
 # inspired by the work done by LDS in CGI.pm.  Here we check to see if the
@@ -1196,7 +1129,6 @@ sub AUTOLOAD {
         _make_tags($AUTOLOAD, @_);
     }
 }
-
 
 # If AUTOLOAD is called for a valid WML tag, this is where it is made.  
 # first we clean up the array we are sent to make sure the first element
@@ -1237,8 +1169,6 @@ sub _make_tags {
 
     #  here for debugging only
     #for (my $i = 0; $i < $pc; $i++) { print "p_ref[$i] is \'$p_ref[$i]\'\n"; }
-
-    
 
     if (@p) {
         if ($pc == 1) { 
@@ -1291,7 +1221,6 @@ sub _make_attrib {
 
     #  here for debugging only
     #print "ac => $ac \n"; 
-
     
     if ($attribs_ref) {
         if ( ref(@$p_ref[0]) ) { shift @$p_ref; }
@@ -1300,7 +1229,6 @@ sub _make_attrib {
 
     #  here for debugging only
     #for (my $i = 0; $i < $ac; $i++) { print "p_ref[$i] is \'@$p_ref[$i]\'\n"; }
-
 
     for (my $i = 0; $i < @$p_ref; $i++) {
         my $j = $i+1;
@@ -1311,12 +1239,7 @@ sub _make_attrib {
     }
 }
 
-
-
 # Preloaded methods go here.
-
-
-
 
 # Autoload methods go after =cut, and are processed by the autosplit program.
 
@@ -1349,8 +1272,6 @@ CGI::WML - Subclass LDS's "CGI.pm" for WML output and WML methods
 
   ($page_title,$content) = $query->html_to_wml($buffer);
 
- 
-
 =head1 DESCRIPTION
 
 This is a library of perl functions to allow CGI.pm-style programming
@@ -1359,7 +1280,7 @@ CGI.pm all the normal CGI.pm methods are available. See B<perldoc CGI>
 if you are not familiar with CGI.pm
 
 The most up to date version of this module is available at
-http://wap.z-y-g-o.com/tools/
+http://cgi-wml.sourceforge.net/
 
 =head1 FUNCTIONS
 
@@ -1367,7 +1288,6 @@ The library provides an object-oriented method of creating correct WML,
 together with some canned methods for often-used tasks. As this module
 is a subclass of CGI.pm, the same argument-passing method is used, and
 arguments may be passed in any order.
-
 
 =head2 CREATING A WML DECK
 
@@ -1385,13 +1305,11 @@ print $query->header();
 print $query->header(-expires=>"+1m",
                      -Refresh=>'20; URL='/newplace.wml');
 
-
 =item B<start_wml()>
 Use the start_wml method to create the start of a WML deck, if you
 wish you can pass paramaters to the method to define a custom DTD,
 XML language value and any 'META' information. If a DTD is not specified
 then the default is to use C<WML 1.1>
-
 
 $query->start_wml(-dtd      => '-//WAPFORUM//DTD WML 5.5//EN',
                   -dtd_url  => 'http://www.wapforum.org/DTD/wml_5.5.xml',
@@ -1406,8 +1324,6 @@ For example, if you want to send the Cache-control: header, do it in the
 header() method:
 
 $q->header(-cache_control=>'No-cache; forua=true');
-
-
 
 =item B<end_wml()>
 
@@ -1492,7 +1408,6 @@ gives
   <go href="#menu"/>
 </do>
 
-
 =head2 PREV
 
 A canned 'back' link, takes an optional label argument. Default label
@@ -1501,7 +1416,6 @@ is 'Back'. For use in B<templates>
 $query->prev(-label=>"Reverse");
 
 <do type="accept" label="Reverse"><prev/></do>
-
 
 =head2 INPUT
 
@@ -1560,8 +1474,6 @@ I<NOTE> the B<localsrc> element, and formatting elements are not supported
 consistently by the current generation of terminals, however they B<should>
 simply ignore the attributes they do not understand.
 
-
-
 =head2 Dial Tags
 
 When using cell phones in WAP you can make calls.  When a dial tag is
@@ -1576,7 +1488,6 @@ $query->dialtag(-label =>"Joe's Pizza",
                 -number=>"12125551212");
 
 The recieving terminal must support WTAI for this link to work.
-
 
 =head1 WML SHORTCUTS
 
@@ -1599,7 +1510,6 @@ example;
      $query->br();                        <br/> # "No-close" tags are
                                                 # automatically dealt with
 
-
 Alternatively, they can be called with a list of arguments, specifying
 content and attibutes.
 
@@ -1607,16 +1517,13 @@ content and attibutes.
       ---------------------            ---------------------
       $query->p(-align=>"left",        <p align="left">Hi there</p>
                 -content=>"Hi there");
-
       
  When being called with the second syntax, the 'content' parameter
  specifies the content of tags. 
 
  All WML 1.1 tags are available via this method.
 
-
 =head1 COMPILING WML DECKS
- 
 
 $query->wml_to_wmlc(-wml=>$buffer,
                     -errorcontext=>2);  # default 0
@@ -1656,7 +1563,6 @@ undef indicates success.
 
 =head1 HTML TO WML CONVERSION
 
-
 ($title,$content) = $query->html_to_wml($buffer);
 
 -or-
@@ -1679,14 +1585,28 @@ translation.
 
 =back
 
-
 =head1 AUTHOR
 
-Angus Wood <angus@z-y-g-o.com>, with loads of additions and improvements by Andy Murren <amurren@oven.com>
+Version 0.06
+
+Andy Murren <andy@murren.org>
+
+Versions 0.01 - 0.05
+
+Angus Wood <angus@z-y-g-o.com>, with loads of additions and
+improvements by Andy Murren <andy@murren.org>
 
 =head1 CREDITS
 
-=item Wilbert Smits <wilbert@telegraafnet.nl> for the header() function content-type override.
+=item Wilbert Smits <wilbert@telegraafnet.nl> for the header()
+      function content-type override.
+
+=head1 CHANGES
+
+Version 0.06
+
+Corrected TempFile to CGITempFile in html_to_wml().  This was causing
+the tests to fail.
 
 =head1 SEE ALSO
 

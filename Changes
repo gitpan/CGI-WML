@@ -71,7 +71,13 @@ Revision history for Perl extension CGI::WML.
 
 1.63  2000/07/24
 	- New AUTOLOADER and manual import list, should fix problems with
-	  functions getting lost and AUTOLOADers getting in to loops.
+	  functions getting lost and AUTOLOADers getting into loops.
 
 1.64  2000/08/25
 	- Added to CPAN as CGI::WML-0.05
+
+1.65  2003/01/12
+	- Fixed TempFile problem in html_to_wml()
+	  Added to http://sourceforge.net/projects/cgi-wml/  as CGI::WML-0.06
+	  Submitted to CPAN as CGI::WML-0.06
+      Changed email address for Andy Murren to amurren@users.sourceforge.net
