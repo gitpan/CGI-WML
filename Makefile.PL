@@ -42,7 +42,7 @@ THERE
     }
     
     if ($usexml) {
-        $prereq =  { 'CGI' => '2.68',
+        $prereq =  { 'CGI' => '2.79',
                      'HTML::Parser' => '0',
                      'HTML::TokeParser' => '0',
                      'HTML::TableExtract' => '0',
@@ -51,7 +51,7 @@ THERE
                      'XML::Parser' => '0'};
     }else{
         remdep();
-        $prereq =  { 'CGI' => '2.68',
+        $prereq =  { 'CGI' => '2.79',
                      'HTML::Parser' => '0',
                      'HTML::TokeParser' => '0',
                      'HTML::TableExtract' => '0',
@@ -90,7 +90,7 @@ WriteMakefile(
     'VERSION_FROM' => 'WML.pm', # finds $VERSION
     'PREREQ_PM'    => &check_dep(),
     ($] ge '5.005') ? (
-             'AUTHOR'       => 'Angus Wood <angus@z-y-g-o.com>',
+             'AUTHOR'       => 'Angus Wood <angus@z-y-g-o.com>, Andy Murren <amurren@users.sourceforge.net>',
              'ABSTRACT'     => 'Subclass CGI.pm for WML output',
          ) : (),
 );

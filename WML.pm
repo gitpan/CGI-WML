@@ -4,7 +4,7 @@ use vars qw($VERSION $RCSVERSION @ISA @EXPORT @EXPORT_OK $USEXMLPARSER
             %WBML_TAGS %WBML_ATTRS %WBML_VALUES %WBML_NO_CLOSE_TAGS
             $AUTOLOAD @ISA @EXPORT @EXPORT_OK);
 
-$USEXMLPARSER=0;
+$USEXMLPARSER=1;
 
 use HTML::TokeParser;
 use HTML::TableExtract;
@@ -17,7 +17,7 @@ require Exporter;
 # but we define our own, and we have to avoid the 'sub foo redefined..' warning
 # We also take care just to import WML-ok routines.
 
-use CGI 2.79 qw(:internal :ssl param upload path_info path_translated url self_url
+use CGI qw(:internal :ssl param upload path_info path_translated url self_url
   	   script_name cookie raw_cookie request_method query_string Accept
   	   user_agent remote_host content_type remote_addr referer server_name
   	   server_software server_port server_protocol protocol virtual_host
@@ -39,7 +39,7 @@ if ($USEXMLPARSER) {
 # Do not simply export all your public functions/methods/constants.
 @EXPORT = qw();
 
-$VERSION = "0.08";
+$VERSION = "0.09";
 $RCSVERSION = do{my@r=q$Revision: 1.67 $=~/\d+/g;sprintf '%d.'.'%02d'x$#r,@r};
 
 my $DEFAULT_DTD     = '-//WAPFORUM//DTD WML 1.1//EN';
@@ -1602,14 +1602,14 @@ translation.
 
 =head1 AUTHOR
 
-Version 0.06 - 0.07
+Version 0.06 - 0.09
 
-Andy Murren <andy@murren.org>
+Andy Murren <amurren@users.sourceforge.net>
 
 Versions 0.01 - 0.05
 
 Angus Wood <angus@z-y-g-o.com>, with loads of additions and
-improvements by Andy Murren <andy@murren.org>
+improvements by Andy Murren <amurren@users.sourceforge.net>
 
 =head1 CREDITS
 
@@ -1618,22 +1618,7 @@ improvements by Andy Murren <andy@murren.org>
 
 =head1 CHANGES
 
-Version 0.08
-
-As of CGI.pm version 2.79 TempFile was changed to CGITempFile.  When I
-made the change in CGI::WML version 0.06 I did not take the CGI.pm version 
-into account.  The module now requires CGI.pm version 2.79 or greater.
-This may mess up a few users who have not upgraded to the latest version of
-CGI.pm (2.88 as of this writing).
-
-Version 0.07
-
-Corrections to the examples and documentation
-
-Version 0.06
-
-Corrected TempFile to CGITempFile in html_to_wml().  This was causing
-the tests to fail.
+See Changes file distributed with the module.
 
 =head1 SEE ALSO
 

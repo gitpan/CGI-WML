@@ -63,11 +63,11 @@ Revision history for Perl extension CGI::WML.
 
 1.61  2000/07/16
 	- Documentation changes, added POD for AUTOLOADed stuff.
-        - Added module to CPAN as CGI::WML-0.03
+    - Added module to CPAN as CGI::WML-0.03
 
 1.62  2000/07/16
 	- Bugfix on autoloader.
-        - Added module to CPAN as CGI::WML-0.04
+    - Added module to CPAN as CGI::WML-0.04
 
 1.63  2000/07/24
 	- New AUTOLOADER and manual import list, should fix problems with
@@ -85,9 +85,18 @@ Revision history for Perl extension CGI::WML.
 1.66  2003/01/29
 	- Corrected some documentation about constructing a deck and the TO DO
 	  Added to http://sourceforge.net/projects/cgi-wml/  as CGI::WML-0.07
-	  Submitted to CPAN as CGI::WML-0.0
+	  Submitted to CPAN as CGI::WML-0.07
 
 1.67  2003/02/18
 	- Now requires CGI.pm version >= 2.79 so CGITempFile is available.
 	  Added to http://sourceforge.net/projects/cgi-wml/  as CGI::WML-0.08
 	  Submitted to CPAN as CGI::WML-0.08
+
+1.68  2003/02/21
+	- Fixed Makefile.PL to reflect CGI.pm version >= 2.79 requirement
+	- While testing $USEXMLPARSER got set to 0 in WML.pm ( Doh!) which
+	  turned off using XML all together.  This is not the setting we want. 
+      To fix that I changed the it to $USEXMLPARSER=1 so XML is installed 
+      by default.
+	  Added to http://sourceforge.net/projects/cgi-wml/  as CGI::WML-0.09
+	  Submitted to CPAN as CGI::WML-0.09
