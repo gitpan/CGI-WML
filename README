@@ -7,9 +7,11 @@ Description:
     existing skills when creating WAP applications.
 
 Copying:
-    Copyright (c) 2000 Angus Wood. All rights reserved.  This program is
-    free software; you can redistribute it and/or modify it under the same
-    terms as Perl itself.
+
+	Copyright (c) 2003 Andrew Murren and copyright (c) 2000 Angus
+	Wood. All rights reserved.  This program is free software; you
+	can redistribute it and/or modify it under the same terms as Perl
+	itself.
 
 Prerequisites:
     perl 5.004, CGI.pm, HTML::Parser, HTML::TokeParser, HTML::TableExtract
@@ -28,6 +30,8 @@ Build/Installation:
     be grateful.
 
 Planned Enhancements:
+	Add support for new standards for WAP2 and XHTML.
+
     Add support for /all/ attributes defined in the WML DTD, I think
     I've covered the most important ones already, but it's nice to 
     be complete.

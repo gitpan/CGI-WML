@@ -81,3 +81,8 @@ Revision history for Perl extension CGI::WML.
 	  Added to http://sourceforge.net/projects/cgi-wml/  as CGI::WML-0.06
 	  Submitted to CPAN as CGI::WML-0.06
       Changed email address for Andy Murren to amurren@users.sourceforge.net
+
+1.66  2003/01/29
+	- Corrected some documentation about constructing a deck and the TO DO
+	  Added to http://sourceforge.net/projects/cgi-wml/  as CGI::WML-0.07
+	  Submitted to CPAN as CGI::WML-0.07

@@ -39,8 +39,8 @@ if ($USEXMLPARSER) {
 # Do not simply export all your public functions/methods/constants.
 @EXPORT = qw();
 
-$VERSION = "0.06";
-$RCSVERSION = do{my@r=q$Revision: 1.65 $=~/\d+/g;sprintf '%d.'.'%02d'x$#r,@r};
+$VERSION = "0.07";
+$RCSVERSION = do{my@r=q$Revision: 1.66 $=~/\d+/g;sprintf '%d.'.'%02d'x$#r,@r};
 
 my $DEFAULT_DTD     = '-//WAPFORUM//DTD WML 1.1//EN';
 my $DEFAULT_DTD_URL = 'http://www.wapforum.org/DTD/wml_1.1.xml';
@@ -473,7 +473,6 @@ sub onevent {
     my ($self,@p) = @_;
     my ($type,$content) = rearrange([TYPE,CONTENT],@p);
 
-
     return qq(<onevent type="$type">$content</onevent>);
 }
 
@@ -566,7 +565,6 @@ sub wml_to_wmlc {
     } else {
         return $WBML_RETBUFF;
     }
-    
 }
 
 ###
@@ -585,7 +583,6 @@ sub wml_start {
     
     my ($parser,$element,@props) = @_;
     my ($tok,$prop,$val,$propandval,$count);
-
     
     # Get the element token, and say wether it has contents and/or 
     # attributes. 
@@ -1257,13 +1254,15 @@ CGI::WML - Subclass LDS's "CGI.pm" for WML output and WML methods
 
   $query = new CGI::WML;
 
+  $content =  $query->p("Hello WAP world");
+
   print
      $query->header(),
      $query->start_wml(),
      $query->template(-content=>$query->prev()),
      $query->card(-id=>"first_card",
               -title=>"First card",
-              -content=>"<p>Hello WAP world!</p>"),
+              -content=>$content),
      $query->end_wml();
 
   print
@@ -1350,8 +1349,24 @@ $query->card(-id=>"card_id",
              -onenterbackward=>"#othercard",
              -content=>"<p>Hello WAP world</p>");
 
-The 'ID' and 'Content' elements are manditory, and have no defaults. All
+The 'ID' and 'Content' elements are manditory, and have no defaults.
+At least one paragraph tag is also required.  If you get everything
+else correct and nothing is diplayed, that may be the reason.  All
 other parameters are optional.
+
+An other way of making the above card would be this:
+
+$content =  $query->p("Hello WAP world");
+
+$query->card(-id=>"card_id",
+             -title=>"First Card",
+             -ontimer=>"#next_card",
+             -timer=>$query->C<timer>(-name=>"timer1",-value=>"30"),
+             -newcontext=>"true",
+             -onenterforward=>"#somecard",
+             -onenterbackward=>"#othercard",
+             -content=>$content);
+
 
 =head2 TEMPLATES
 
@@ -1587,7 +1602,7 @@ translation.
 
 =head1 AUTHOR
 
-Version 0.06
+Version 0.06 - 0.07
 
 Andy Murren <andy@murren.org>
 
@@ -1602,6 +1617,10 @@ improvements by Andy Murren <andy@murren.org>
       function content-type override.
 
 =head1 CHANGES
+
+Version 0.07
+
+Corrections to the examples and documentation
 
 Version 0.06
 
