@@ -27,7 +27,7 @@ Revision history for Perl extension CGI::WAP.
 
 1.54  2000/06/03
         - Added Andy's 'img' tag routine, and POD, and Andy's 'dialtag' POD
-          Removed code which tried to sidestep the XML::Parser dependancy, it
+        - Removed code which tried to sidestep the XML::Parser dependancy, it
           didn't work anyway.
 
 1.55  2000/06/03
@@ -35,3 +35,7 @@ Revision history for Perl extension CGI::WAP.
           $self->SUPER::rearrange() stuff has been replaced with a straight
           local copy of CGI::Util's 'rearrange' routine since it was causing
           problems accross installations.
+
+1.56  2000/06/25
+	- Added in Andy's "p" method and POD documentation.
+	- Added first implementation of cHTML to WML converter.

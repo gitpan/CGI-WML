@@ -1,10 +1,20 @@
 package CGI::WML;
 
-#use strict;
-use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
+use vars qw($VERSION @ISA @EXPORT @EXPORT_OK $USEXMLPARSER);
+
+$USEXMLPARSER=1;
 
 use CGI;
-use XML::Parser;
+if ($USEXMLPARSER) {
+    use XML::Parser;
+}
+use HTML::TokeParser;
+use IO::Handle;
+use IO::File;
+use Carp;
+use strict;
+#no strict 'vars';
+no strict 'subs';
 
 require Exporter;
 
@@ -16,21 +26,25 @@ require Exporter;
 );
 
 
-$VERSION = do{my@r=q$Revision: 0.1 $=~/\d+/g;sprintf '%d.'.'%02d'x$#r,@r};
-$DEFAULT_DTD = '-//WAPFORUM//DTD WML 1.1//EN';
+$VERSION = do{my@r=q$Revision: 0.02 $=~/\d+/g;sprintf '%d.'.'%02d'x$#r,@r};
 
-$DOTABLE = 0; #use string tables. do not change, stringtables not done.
+my $DEFAULT_DTD     = '-//WAPFORUM//DTD WML 1.1//EN';
+my $DEFAULT_DTD_URL = 'http://www.wapforum.org/DTD/wml_1.1.xml';
+
+my $DOTABLE = 0; #use string tables. do not change, stringtables not done.
+my ($WBML_RETBUFF,%STRTAB);
 
 # Wireless Binary Markup Language, as defined in WAP forum docs
-$WBML_INLINE_STRING     = 0x03;
-$WBML_INLINE_STRING_END = 0x00;
-$WBML_STRINGTABLE_REF   = 0x83;
-$WMLTC_ATTRIBUTES       = 0x80;
-$WMLTC_CONTENT          = 0x40;
-$WMLTC_END              = 0x01;
+my $WBML_INLINE_STRING     = 0x03;
+my $WBML_INLINE_STRING_END = 0x00;
+my $WBML_STRINGTABLE_REF   = 0x83;
+my $WMLTC_ATTRIBUTES       = 0x80;
+my $WMLTC_CONTENT          = 0x40;
+my $WMLTC_END              = 0x01;
 
  
-%WBML_TAGS = ('a' => '29',
+my %WBML_TAGS = (
+        'a' => '29',
 	'td' => '30',
 	'tr' => '31',
 	'table' => '32',
@@ -67,7 +81,8 @@ $WMLTC_END              = 0x01;
 	'setvar' => '63',
 	'wml' => '64');
 
-%WBML_ATTRS = (	'accept-charset' => '6',
+my %WBML_ATTRS = (
+        'accept-charset' => '6',
 	'align="bottom"' => '7',
 	'align="center"' => '8',
 	'align="middle"' => '9',
@@ -157,7 +172,7 @@ $WMLTC_END              = 0x01;
 	'content="application/vnd.wap.wmlc;charset=' => '93',
 	'http-equiv="Expires"' => '94');
 
-%WBML_VALUES = (
+my %WBML_VALUES = (
         '.com/' => '134',
 	'.edu/' => '135',
 	'.net/' => '136',
@@ -188,23 +203,39 @@ $WMLTC_END              = 0x01;
 	'wrap' => '161',
 	'www.' => '162');
 
-%WBML_NO_CLOSE_TAGS = (
-        'br' => '1',
+my %WBML_NO_CLOSE_TAGS = (
+    'br' => '1',
 	'noop' => '1',
 	'prev' => '1',
 	'img' => '1',
 	'meta' => '1',
 	'timer' => '1',
-        'setvar' => '1');
+    'setvar' => '1');
+
+# HTML->WML conversion constants
+# Ignore these HTML and iMode tags completely.
+my %IGNORE_TAG = map {$_ => 1} qw(abbr acronym address applet area basefont
+				  bdo body cite col colgroup del dfn dir div
+				  dl dt fieldsset font frame frameset head
+				  html iframe legend link noframes noscript 
+				  object param script span style textarea
+				  tfoot thead var);
+
+# Straightforward one to one tag mapping
+my %TAGMAP = map {$_ => 1} qw(em strong i b u big small table tr td); 
+
+
+my (%Open_Tags,$Open_Form_Url,@Open_Vars,%Hidden_Vars);
+
 
 ### 
 ##  End of global variable setting. 
 ###
 
 sub new {
-     my ($self, $initializer, @param) = @_;
-     $CGI::USE_PARAM_SEMICOLONS++;
-     return $CGI::Q = $self->SUPER::new($initializer, @param);
+    my ($self, $initializer, @param) = @_;
+    $CGI::USE_PARAM_SEMICOLONS++;
+    return $CGI::Q = $self->SUPER::new($initializer, @param);
 }
 
 sub DESTROY { }
@@ -233,29 +264,30 @@ sub header {
 ###
 sub start_wml {
     my($self,@p) = &CGI::self_or_default(@_);
-    my($meta,$cardid,$dtd,$lang,$encoding) =
-	rearrange([META,CARDID,DTD,LANG,ENCODING],@p);
+    my($meta,$cardid,$dtd,$dtd_url,$lang,$encoding) =
+	rearrange([META,CARDID,DTD,DTD_URL,LANG,ENCODING],@p);
     
     if (!defined $encoding) { $encoding="iso-8859-1";}
     
     my(@result);
     push @result,qq(<?xml version="1.0" encoding="$encoding"?>);
     $dtd = $DEFAULT_DTD unless $dtd && $dtd =~ m|^-//|;
+    $dtd_url = $DEFAULT_DTD_URL unless $dtd_url && $dtd_url =~ m|^http|;
     push(@result,qq(\n<!DOCTYPE wml PUBLIC "$dtd" 
-		    "http://www.wapforum.org/DTD/wml_1.1.xml">\n)) if $dtd;
+	            "$dtd_url">\n)) if $dtd && $dtd_url;
 
     push(@result,qq(<wml));
     push(@result,qq(xml:lang="$lang")) if (defined $lang);
     push(@result,">");
 
     if (defined $meta) {
-	push(@result,"<head>");
-	if ($meta && ref($meta) && (ref($meta) eq 'HASH')) {
-	    foreach (keys %$meta) {
-		push(@result,qq(<meta $_ $meta->{$_}/>\n));
-	    }
-	}
-	push(@result,"</head>");
+        push(@result,"<head>");
+        if ($meta && ref($meta) && (ref($meta) eq 'HASH')) {
+            foreach (keys %$meta) {
+                push(@result,qq(<meta $_ $meta->{$_}/>\n));
+            }
+        }
+        push(@result,"</head>");
     }
 
     return join(" ",@result);
@@ -268,10 +300,11 @@ sub start_wml {
 sub card {
     my ($self,@p) = &CGI::self_or_default(@_);
     my ($id,$title,$content,$ontimer,$timer,$onenterforward,$onenterbackward,
-	$newcontext,$ordered,$class,$lang) = rearrange([ID,TITLE,CONTENT,ONTIMER,TIMER,ONENTERFORWARD,ONENTERBACKWARD,NEWCONTEXT,ORDERED,CLASS,LANG],@p);
+	$newcontext,$ordered,$class,$lang) =
+        rearrange([ID,TITLE,CONTENT,ONTIMER,TIMER,ONENTERFORWARD,ONENTERBACKWARD,NEWCONTEXT,ORDERED,CLASS,LANG],@p);
     
     my @ret;
-
+ 
     push(@ret,qq(\n<card id="$id"));
     push(@ret,qq(title="$title")) if (defined $title);
     push(@ret,qq(newcontext="$newcontext")) if (defined $newcontext);
@@ -343,7 +376,7 @@ sub template {
 ###
 sub go {
     my ($self,@p) = @_;
-    my ($method,$href,$postfields) = rearrange([METHOD,HREF,POSTFIELDS],@p);
+    my ($method,$href,$postfields) = CGI::rearrange([METHOD,HREF,POSTFIELDS],@p);
 
     my @ret;
     
@@ -352,10 +385,10 @@ sub go {
     
     if (defined $postfields) {
       if ($postfields && ref($postfields) && (ref($postfields) eq 'HASH')) {
-	push(@ret,">");
-	foreach (keys %$postfields) {
-	  push(@ret,qq(<postfield name="$_" value="$postfields->{$_}"/>));
-	}
+          push(@ret,">");
+          foreach (keys %$postfields) {
+              push(@ret,qq(<postfield name="$_" value="$postfields->{$_}"/>));
+          }
       }
       push(@ret,"</go>");
     } else {
@@ -465,6 +498,23 @@ sub img {
 
 }
 
+sub p {
+    my ($self, @p) = @_;
+
+    my ($content, $align, $mode) = rearrange([CONTENT, ALIGN, MODE], @p);
+    my @ret;
+
+    push ( @ret, qq(<p));
+    push ( @ret, qq(align="$align")) if $align;
+    push ( @ret, qq(mode="$mode"))   if $mode;    
+    push ( @ret, qq(>$content</p>));
+    return join (" ", @ret);  
+} 
+
+
+
+
+
 
 #### Method: wml_to_wmlc
 # Convert textal WML to binary WML, not indented to replace the WML
@@ -476,6 +526,11 @@ sub wml_to_wmlc {
     my ($streamheader,$wbml,$parser,$testparser,$stringtable);
     my ($self,@p) = @_;
     my ($wml,$errorcontext) = rearrange([WML,ERRORCONTEXT],@p);
+ 
+    if ($USEXMLPARSER == 0) {
+        croak("Error: Routine disabled at installation.");
+        return undef;
+    }
     
     (defined $errorcontext) || ($errorcontext = 0);
     $parser = new XML::Parser(ErrorContext=>$errorcontext);
@@ -493,8 +548,8 @@ sub wml_to_wmlc {
     
 
     $parser->setHandlers(Start=>\&wml_start,
-			 End=>\&wml_end,
-			 Char=>\&wml_char,
+                         End=>\&wml_end,
+                         Char=>\&wml_char,
                          Final=>\&wml_final);
     
 
@@ -504,15 +559,15 @@ sub wml_to_wmlc {
     $testparser = eval '$parser->parse($wml); return 1';
     
     if (!defined $testparser) {
-	warn ("Error: XML parser failed. Bad WML ?\n");
-	if ($errorcontext) {
-	    # This is going to throw a die(), since we know the
-	    # document is not well formed.
-	    $parser->parse($wml);
-	}
-	return undef;
+        warn ("Error: XML parser failed. Bad WML ?\n");
+        if ($errorcontext) {
+            # This is going to throw a die(), since we know the
+            # document is not well formed.
+            $parser->parse($wml);
+        }
+        return undef;
     } else {
-	return $WBML_RETBUFF;
+        return $WBML_RETBUFF;
     }
     
 }
@@ -547,52 +602,52 @@ sub wml_start {
     $WBML_RETBUFF .= chr($tok);
     
     for ($count = 0 ; $count < scalar(@props); $count++) {
-	$prop = $props[$count];
-	$val = $props[++$count];
-	$propandval = $prop."=\"".$val."\"";
-	$propandval =~ s/\ //g;
+        $prop = $props[$count];
+        $val = $props[++$count];
+        $propandval = $prop."=\"".$val."\"";
+        $propandval =~ s/\ //g;
 	
 	# Look for a single attib val first, and if not, break it in
 	# to parts and tokenise them.
 	
-	if ($WBML_ATTRS{$propandval}) { # We got a single value
+        if ($WBML_ATTRS{$propandval}) { # We got a single value
 
-	    $WBML_RETBUFF .= chr($WBML_ATTRS{$propandval});
+            $WBML_RETBUFF .= chr($WBML_ATTRS{$propandval});
 	    
-	}else{  # Break it up and encode the parts
+        }else{  # Break it up and encode the parts
 	    
-	    $WBML_RETBUFF .= chr($WBML_ATTRS{$prop});
+            $WBML_RETBUFF .= chr($WBML_ATTRS{$prop});
 	    
-	    if ($WBML_VALUES{$val}) {
-		$WBML_RETBUFF .= chr($WBML_VALUES{$val});
-	    }else{
-		#if ($prop =~ /href/){ # Special case for URLS
-		#    if ($val =~ /^http\:\/\//) {
-		#	accum(pack('c',chr($WBML_VALUES{"http://"})));
-		#	$val =~ s%^http://%%g;
-		#    }
-		#}
-		if ($WBML_VALUES{$val}) {
-		    $WBML_RETBUFF .= chr($WBML_VALUES{$val});
-		} else {
-		    if ($STRTAB{$val}) {
-			$WBML_RETBUFF .= pack('CC',
+            if ($WBML_VALUES{$val}) {
+                $WBML_RETBUFF .= chr($WBML_VALUES{$val});
+            }else{
+                #if ($prop =~ /href/){ # Special case for URLS
+                #    if ($val =~ /^http\:\/\//) {
+                #	accum(pack('c',chr($WBML_VALUES{"http://"})));
+                #	$val =~ s%^http://%%g;
+                #    }
+                #}
+                if ($WBML_VALUES{$val}) {
+                    $WBML_RETBUFF .= chr($WBML_VALUES{$val});
+                } else {
+                    if ($STRTAB{$val}) {
+                        $WBML_RETBUFF .= pack('CC',
 					    $WBML_STRINGTABLE_REF,
 					    $STRTAB{$val});
-		    }else{
-			$WBML_RETBUFF .= chr($WBML_INLINE_STRING);
-			$WBML_RETBUFF .= $val;
-			$WBML_RETBUFF .= chr($WBML_INLINE_STRING_END);
-		    }
-		}
-	    }
-	}
+                    } else {
+                        $WBML_RETBUFF .= chr($WBML_INLINE_STRING);
+                        $WBML_RETBUFF .= $val;
+                        $WBML_RETBUFF .= chr($WBML_INLINE_STRING_END);
+                    }
+                }
+            }
+        }
     }
     
     if ($count) {
-	# If there was an attribute list, we've got to mark it's 
-	# end. Is there a better way of doing this? an Expat option perhaps?
-	$WBML_RETBUFF .= chr($WMLTC_END);
+        # If there was an attribute list, we've got to mark it's 
+        # end. Is there a better way of doing this? an Expat option perhaps?
+        $WBML_RETBUFF .= chr($WMLTC_END);
     }
 }
 
@@ -604,7 +659,7 @@ sub wml_end {
     # Just return 0x01, unless it's in the "no closures" hash
     my ($parser,$tag) = @_;
     if (! defined($WBML_NO_CLOSE_TAGS{$tag})) {
-	$WBML_RETBUFF .= chr($WMLTC_END);
+        $WBML_RETBUFF .= chr($WMLTC_END);
     }
 }    
 
@@ -617,7 +672,7 @@ sub wml_end {
 sub wml_char {
     my $parser = shift;
     my $charstr = shift;
-    my ($char,$buff,$f_white);
+    my ($char,$buff,$f_white,$word);
     
     $char = $buff = "";
     $f_white = 0;
@@ -628,17 +683,17 @@ sub wml_char {
     # If it's in the string table, then take it from there, else
     # add it in as an inline string.
     if  ($charstr !~ /^\s$/) { 
-	if ($DOTABLE) {
-	    foreach $word (split(' ',$charstr)) {
-		if (defined $STRTAB{$word}) {
-		    $WBML_RETBUFF .=chr($WBML_INLINE_STRING).chr($STRTAB{$word});
-		} else {
-		    $WBML_RETBUFF .=chr($WBML_INLINE_STRING_END).$word.chr(0x00);
-		}
-	    }
-	} else {
-	    $WBML_RETBUFF .= chr(0x03).$charstr.chr(0x00);
-	}
+        if ($DOTABLE) {
+            foreach $word (split(' ',$charstr)) {
+                if (defined $STRTAB{$word}) {
+                    $WBML_RETBUFF .=chr($WBML_INLINE_STRING).chr($STRTAB{$word});
+                } else {
+                    $WBML_RETBUFF .=chr($WBML_INLINE_STRING_END).$word.chr(0x00);
+                }
+            }
+        } else {
+            $WBML_RETBUFF .= chr(0x03).$charstr.chr(0x00);
+        }
     }
 }
 
@@ -680,6 +735,300 @@ sub rearrange {
 }
 
 
+###
+# HTML to WML conversion, not particularly good conversion though. YMMV
+# Inspired by Taneli Leppa's "html2wml" distributed with the
+# Kannel Open Source WAP gateway.
+###
+
+sub html_to_wml {
+
+    my ($self,@p) = @_;
+    my ($arg,$redirect_via,$redirect_var,$breaks_after_links) = rearrange([HTML,URL,VARNAME,LINKBREAKS],@p);
+
+    my ($parser,$title,$content,$ioref,$tmp,$tmpfile);
+
+    return undef unless (defined $arg);
+
+    ($redirect_via = "0") if (!defined $redirect_via);
+    ($redirect_var = "0") if (!defined $redirect_var);
+    ($breaks_after_links = 0) if (!defined $breaks_after_links);
+
+    if (ref($arg) and UNIVERSAL::isa($arg, 'IO::Handler')) {
+        # We've got a filehandle.
+        $ioref = $arg;
+    } else {
+        eval {
+            $ioref = *{$arg}{IO};
+        };
+    }
+
+
+    if (! defined $ioref ) {
+        # We've got a scalar, put it in a tempfile.
+	
+        # Whipped from CGI.pm.
+
+        # choose a relatively unpredictable tmpfile sequence number
+        my $seqno = unpack("%16C*",join('',localtime,values %ENV));
+
+        for (my $cnt=10;$cnt>0;$cnt--) {
+            next unless $tmpfile = new TempFile($seqno);
+            $tmp = $tmpfile->as_string;
+
+            last if defined ($ioref = new IO::File "> $tmp");
+            $ioref->autoflush(1);
+	    
+            $seqno += int rand(100);
+        }
+
+        croak("Can't get a tempfile") unless (defined $ioref);
+
+        print $ioref $arg || croak ($!);
+        $ioref->close;
+        open($ioref,$tmp) || croak ($!);
+    }
+
+    $parser = HTML::TokeParser->new($ioref);
+   
+    $parser->get_tag("title");
+    $title = $parser->get_text;
+    $content  = html_to_wml_getcontent($self,$parser,$redirect_via,
+                                       $redirect_var,$breaks_after_links);
+    
+    return ($title,$content);
+    
+    
+}
+
+### 
+# Non-public function, used by 'convert' routine, extracts 
+# text and does limited tag conversion.
+###
+sub html_to_wml_getcontent {
+    
+    my $self = shift;
+    my $p = shift;
+    my $redirect_via = shift;
+    my $redirect_var = shift;
+    my $breaks_after_links = shift;
+    my ($wml,$wmlbit,$token,$tag);
+    
+
+    while ($token = $p->get_token) {
+	if ($token->[1]) {
+	    $_ = $token->[0];
+	  TAGTYPE: {
+	      /S/ && do { $wmlbit = _start_tag($self,$p,$token->[1],
+					       $token->[2],
+					       $redirect_via,
+					       $redirect_var,
+					       $breaks_after_links);
+			  last TAGTYPE;
+		      };
+	      /E/ && do { $wmlbit = _end_tag($token->[1]);
+			  last TAGTYPE;
+		      };
+	      /T/ && do { $wmlbit = $token->[1];
+			  $wmlbit =~ s/\&copy\;/\(c\)/g;
+			  chomp $wmlbit;
+			  last TAGTYPE;
+		      };
+	  }  
+	}
+        $wml .= $wmlbit if $wmlbit;
+    }
+    
+    foreach $tag (%Open_Tags) {
+        if ( (defined $Open_Tags{$tag}) && ($Open_Tags{$tag} >= 1)) {
+            $wml .="</$tag>";
+        }
+    }
+    $wml .= "</p>";
+    
+    return $wml;
+}
+
+### 
+# Non-public function, used by 'html_to_wml' routine
+###
+sub _start_tag {
+    my $self = shift;
+    my $p = shift;
+    my $tag = shift;
+    my $attrs = shift;
+    my $redirect_via = shift;
+    my $redirect_var = shift;
+    my $breaks_after_links = shift;
+   
+    if ($breaks_after_links) {
+        $breaks_after_links = "<br/>\n";
+    }else{
+        $breaks_after_links = "";
+    }
+
+    my ($y,$x,$type,$varname,%pfs);
+
+
+    return "<p>" if (lc($tag) eq "body");
+
+    return if $IGNORE_TAG{$tag};
+    
+    if ($TAGMAP{$tag}) {
+        if ( (defined $Open_Tags{$tag}) && ($Open_Tags{$tag} > 1)) {
+	    $Open_Tags{$tag}++;
+	    return lc("</$tag><$tag>");
+        }else{
+	    $Open_Tags{$tag}++;
+	    return lc("<$tag>");
+        }
+    }
+    
+    for ($tag) {
+	
+	# Tag-to-tag mapping.
+
+        /^a$/ && do {
+            $y = $attrs->{'href'};
+	    $y =~ s%&%&amp;%g;
+
+            if (defined $redirect_via) {
+                 $y = qq($redirect_via?$redirect_var=$y);
+            }
+            return sprintf("<a href='%s' %s>%s",
+                           $y,
+                           ( (defined $attrs->{'accesskey'} ? 
+                             "accesskey = '" . $attrs->{'accesskey'} . "'" :
+                             "")),
+                           $breaks_after_links);
+        };
+        
+        /^img$/ && do {
+            $y = $attrs->{'src'};
+            $x = $attrs->{'alt'};
+            $x = "image" unless $x;
+            
+            return "<$tag src='$y' alt='$x'/>";
+	};
+	
+	/^hr$/ && do {
+	    return "<br/>------<br/>";
+	};
+	
+	/^dd$/ && do {
+	    return "<br/>";
+	};
+	
+	/^dl/ && do {
+	    return "<br/>";
+	};
+	    
+
+	/^form$/ && do {
+	    $Open_Form_Url = $attrs->{'action'};
+	    return "";
+	};
+
+	/^select$/ && do {
+	    push @Open_Vars, $attrs->{'name'};
+	    return sprintf("<select name='%s'>",$attrs->{'name'});
+	};
+
+	/^option$/ && do {
+	    return
+		sprintf ("<option value='%s'>%s</option>",
+			 $attrs->{'value'},
+			 $p->get_text);
+	};
+
+
+
+	/^input$/ && do {
+
+	    # Transforming input tags isn't much fun.
+	    $type = lc($attrs->{'type'});
+
+	    ($type eq "hidden") && do {
+		$Hidden_Vars{$attrs->{'name'}} = $attrs->{'value'};
+	    };
+
+	    ($type eq "text") && do {
+		push @Open_Vars, $attrs->{'name'};
+		return $self->input(-name=>$attrs->{'name'},
+				    -value=>$attrs->{'value'},
+				    -size=>$attrs->{'size'},
+				    -maxlength=>$attrs->{'maxlength'});
+	    };
+
+	    
+	    ($type eq "submit") && do{
+		my $url = $Open_Form_Url;
+
+		foreach $varname (@Open_Vars) {
+		    $pfs{$varname} = "\$($varname:e)";
+		}
+		foreach $varname (keys %Hidden_Vars) {
+		    $pfs{$varname} = $Hidden_Vars{$varname};
+		}
+
+		undef @Open_Vars;
+
+		return $self->do(-type=>"accept",
+				 -label=>($attrs->{'value'} || "Send"),
+				 -content=>$self->go(-method=>"post",
+						     -href=>$Open_Form_Url,
+						     -postfields=>\%pfs));
+	    };
+
+	};
+
+            
+    }
+}
+
+### 
+# Non-public function, used by 'html_to_wml' routine
+###
+sub _end_tag {
+    
+    my $tag = shift;
+       
+
+    return if $IGNORE_TAG{$tag};
+
+    if ($TAGMAP{$tag}) {
+        $Open_Tags{$tag}--;
+        return lc("</$tag>");
+    }
+    
+    for ($tag) {
+	/^a$/     && return "</a>";
+	/^p$/     && return "<br/>";
+	/^h[0-9]/ && return "<br/>";
+	/^dl$/    && return "<br/>";
+	/^li$/    && return "<br/>";
+	/^select$/&& return "</select>";
+    }
+    
+    
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Preloaded methods go here.
 
 
@@ -688,6 +1037,7 @@ sub rearrange {
 # Autoload methods go after =cut, and are processed by the autosplit program.
 
 1;
+
 __END__
 
 =head1 NAME
@@ -715,6 +1065,8 @@ CGI::WML - Subclass LDS's "CGI.pm" for WML output and WML methods
   print
      $q->wml_to_wmlc(-wml=>$wml_buffer,
                      -errorcontext=>2);
+
+  ($title,$content) = $query->html_to_wml($buffer);
 
  
 
@@ -766,11 +1118,12 @@ XML language value and any 'META' information. If a DTD is not specified
 then the default is to use C<WML 1.1>
 
 
-$query->start_wml(-dtd=>'-//WAPFORUM//DTD WML 5.5//EN',
-                  -lang=>"en-gb",
-                  -encoding=>"iso-8859-1",
-                  -meta=>{'scheme'=>'foobar',
-                          'name'=>'mystuff'});
+$query->start_wml(-dtd      =>'-//WAPFORUM//DTD WML 5.5//EN',
+                  -dtd_url  => 'http://www.wapforum.org/DTD/wml_5.5.xml',
+                  -lang     =>"en-gb",
+                  -encoding =>"iso-8859-1",
+                  -meta     =>{'scheme'=>'foobar',
+                               'name'  =>'mystuff'});
 
 =item B<end_wml()>
 
@@ -930,6 +1283,39 @@ consistently by the current generation of terminals, however they B<should>
 simply ignore the attributes they do not understand.
 
 
+=head2 P
+
+A paragraph can be created with the following attributes
+
+align  (left|right|center)
+
+This attribute specifies the text alignment mode for the
+paragraph. Text can be centre aligned, left aligned or right aligned
+when it is displayed to the user. Left alignment is the default
+alignment mode. If not explicitly specified, the text alignment is set
+to the default alignment.
+
+mode   (wrap|nowrap)
+
+This attribute specifies the line-wrap mode for the paragraph. Wrap
+specifies breaking text mode and nowrap specifies non-breaking text
+mode. If not explicitly specified, the line-wrap mode is identical to
+the line-wrap mode of the previous paragraph in the text flow of a
+card. The default mode for the first paragraph in a card is wrap.
+
+
+    content   
+
+my $p = $q->p( -align    => 'center',
+               -mode     => 'nowrap',
+               -content  => 'This is a paragraph');
+
+If you are not going to use the align or mode attributes you can call
+it like this:
+
+my $p = $q->p("This is content");
+
+
 =head2 Dial Tags
 
 When using cell phones in WAP you can make calls.  When a dial tag is
@@ -973,7 +1359,23 @@ value to zero and check the return value of the function. The function
 returns undef upon failiure and issues a warning, anything other than
 undef indicates success.
 
+=head1 HTML TO WML CONVERSION
 
+($title,$content) = $query->html_to_wml($buffer);
+
+-or-
+
+($title,$content) = $query->html_to_wml(\*FILEHANDLE);
+
+A limited HTML to WML converter is included in this package. Be warned
+that only pretty well marked-up HTML will convert cleanly to WML.
+Dave Ragget's excellent B<tidy> utility 
+[ see http://www.w3.org/People/Raggett/tidy/ ]
+will clean up most HTML into a parseable state.
+
+The main purpose of this function is for converting server error messages 
+and the "Compact HTML" used on "I-Mode" systems to readable WML, not for
+general page translation.
 
 =back
 
@@ -989,6 +1391,8 @@ Angus Wood <angus@z-y-g-o.com>, with additions and improvements by Andy Murren <
 
 =head1 SEE ALSO
 
-perl(1), perldoc CGI.
+perl(1), perldoc CGI, tidy(1)
 
 =cut
+
+

@@ -6,7 +6,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..2\n"; }
+BEGIN { $| = 1; print "1..3\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use CGI::WML;
 $loaded = 1;
@@ -14,5 +14,8 @@ print "ok 1\n";
 
 ######################### End of black magic.
 
-$q = new CGI::WML('') && print "ok 2\n";
+( $q = CGI::WML->new() ) && print "ok 2\n";
+
+( $q->header() =~ "Content-Type: text/vnd.wap.wml") && print "ok 3\n";
+
 

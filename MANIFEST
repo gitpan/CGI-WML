@@ -1,7 +1,10 @@
+WML.pm
 Changes
 MANIFEST
 README
 COPYING
 Makefile.PL
-WML.pm
-test.pl
+t/01.t
+t/02.t
+t/03.t
+t/test.html
