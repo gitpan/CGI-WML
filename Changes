@@ -68,3 +68,10 @@ Revision history for Perl extension CGI::WML.
 1.62  2000/07/16
 	- Bugfix on autoloader.
         - Added module to CPAN as CGI::WML-0.04
+
+1.63  2000/07/24
+	- New AUTOLOADER and manual import list, should fix problems with
+	  functions getting lost and AUTOLOADers getting in to loops.
+
+1.64  2000/08/25
+	- Added to CPAN as CGI::WML-0.05

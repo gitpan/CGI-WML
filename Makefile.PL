@@ -85,16 +85,14 @@ sub remdep {
 }
 
 
-@ppd = (
-  AUTHOR        => 'Angus Wood <angus@z-y-g-o.com>',
-  ABSTRACT      => 'Subclass CGI.pm for WML output',
-) if $] >= 5.00503;
-
 WriteMakefile(
     'NAME'	=> 'CGI::WML',
     'VERSION_FROM' => 'WML.pm', # finds $VERSION
     'PREREQ_PM'    => &check_dep(),
-    @ppd,
+    ($] ge '5.005') ? (
+             'AUTHOR'       => 'Angus Wood <angus@z-y-g-o.com>',
+             'ABSTRACT'     => 'Subclass CGI.pm for WML output',
+         ) : (),
 );
 
 

@@ -1,34 +1,57 @@
 package CGI::WML;
 
-use vars qw($VERSION $RCSVERSION @ISA @EXPORT @EXPORT_OK $USEXMLPARSER %WBML_TAGS %WBML_ATTRS %WBML_VALUES %WBML_NO_CLOSE_TAGS $AUTOLOAD);
+use vars qw($VERSION $RCSVERSION @ISA @EXPORT @EXPORT_OK $USEXMLPARSER
+            %WBML_TAGS %WBML_ATTRS %WBML_VALUES %WBML_NO_CLOSE_TAGS
+            $AUTOLOAD @ISA @EXPORT @EXPORT_OK);
 
 $USEXMLPARSER=1;
 
-require CGI;  # Not "use" anymore.
-use CGI::Util qw(rearrange make_attributes unescape escape expires);
-if ($USEXMLPARSER) {
-    use XML::Parser;
-}
+
 use HTML::TokeParser;
 use HTML::TableExtract;
 use IO::Handle;
 use IO::File;
 use Carp;
-#use strict;       # AUTOLOAD bit can't currently 'use strict';
-#no strict 'subs'; # rearrange() stuff breaks 'strict subs' too.
-
+#use strict;
+#no strict 'subs'; # not that strict really :-|
+#no strict 'vars';
 require Exporter;
 
-@ISA = qw(Exporter CGI);  # Inheret from CGI.pm
+
+# Big fat manual import list, since the 'header' routine is in the :cgi pack,
+# but we define our own, and we have to avoid the 'sub foo redefined..' warning
+# We also take care just to import WML-ok routines.
+
+use CGI qw(:internal :ssl param upload path_info path_translated url self_url
+  	   script_name cookie raw_cookie request_method query_string Accept
+  	   user_agent remote_host content_type remote_addr referer server_name
+  	   server_software server_port server_protocol protocol virtual_host
+  	   remote_ident auth_type http save_parameters restore_parameters
+  	   param_fetch remote_user user_name redirect import_names put delete
+	   delete_all url_param cgi_error escapeHTML charset cache);
+
+use CGI::Util qw(rearrange make_attributes unescape escape expires);
+
+
+if ($USEXMLPARSER) {
+    require XML::Parser;
+    import XML::Parser;
+}
+
+
+@ISA = qw(Exporter CGI CGI::Util);  # Inheret from CGI.pm
+
+
+
+
 
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-@EXPORT = qw(
-);
+@EXPORT = qw();
 
-$VERSION = "0.04";
-$RCSVERSION = do{my@r=q$Revision: 1.62 $=~/\d+/g;sprintf '%d.'.'%02d'x$#r,@r};
+$VERSION = "0.05";
+$RCSVERSION = do{my@r=q$Revision: 1.64 $=~/\d+/g;sprintf '%d.'.'%02d'x$#r,@r};
 
 my $DEFAULT_DTD     = '-//WAPFORUM//DTD WML 1.1//EN';
 my $DEFAULT_DTD_URL = 'http://www.wapforum.org/DTD/wml_1.1.xml';
@@ -264,6 +287,7 @@ my (%Open_Tags,@Open_Tables,$Open_Form_Url,
 # Contributed by Wilbert Smits <wilbert@telegraafnet.nl>
 ###
 sub header {
+    local($^W)=0;
     my($self,@p) = &CGI::self_or_default(@_);
     my($type, @leftover) = rearrange([TYPE],@p);
     my %leftover;
@@ -275,22 +299,14 @@ sub header {
     return $self->SUPER::header("-type"=>$type, %leftover);
 }
 
-sub cache { 
-    
-    # The autoloaders get in to recursive loop unless this is overrriden
-    # This means people will have to specify the "Pragma: " header 
-    # manually. XXX fixme.
-    
-}
-
 
 ### Method: start_wml
 # Guess what this does!
 ###
 sub start_wml {
     my($self,@p) = &CGI::self_or_default(@_);
-    my($meta,$cardid,$dtd,$dtd_url,$lang,$encoding) =
-	rearrange([META,CARDID,DTD,DTD_URL,LANG,ENCODING],@p);
+    my($meta,$dtd,$dtd_url,$lang,$encoding) =
+	rearrange([META,DTD,DTD_URL,LANG,ENCODING],@p);
     
     if (!defined $encoding) { $encoding="iso-8859-1";}
     
@@ -401,7 +417,7 @@ sub template {
 ###
 sub go {
     my ($self,@p) = @_;
-    my ($method,$href,$postfields) = CGI::rearrange([METHOD,HREF,POSTFIELDS],@p);
+    my ($method,$href,$postfields) = rearrange([METHOD,HREF,POSTFIELDS],@p);
 
     my @ret;
     
@@ -822,7 +838,8 @@ sub html_to_wml {
     my ($self,@p) = @_;
     my ($arg,$redirect_via,$redirect_var,$breaks_after_links) = rearrange([HTML,URL,VARNAME,LINKBREAKS],@p);
 
-    my ($parser,$title,$content,$ioref,$tmp,$tmpfile);
+    my ($parser,$title,$content,$ioref,$filename,$tmpfile);
+    $filename = "";
 
     return undef unless (defined $arg);
 
@@ -850,9 +867,9 @@ sub html_to_wml {
 
         for (my $cnt=10;$cnt>0;$cnt--) {
             next unless $tmpfile = new TempFile($seqno);
-            $tmp = $tmpfile->as_string;
+            $filename = $tmpfile->as_string;
 
-            last if defined ($ioref = new IO::File "> $tmp");
+            last if defined ($ioref = new IO::File "> $filename");
             $ioref->autoflush(1);
 	    
             $seqno += int rand(100);
@@ -863,23 +880,23 @@ sub html_to_wml {
         print $ioref $arg || croak ($!);
         $ioref->close;
 	
-        open($ioref,$tmp) || croak ($!);
+        open($ioref,$filename) || croak ($!);
 	html_to_wml_gettables($ioref);
 	$ioref->close;
 
-	open($ioref,$tmp) || croak ($!);
+	open($ioref,$filename) || croak ($!);
     }
 
     #html_to_wml_gettables($ioref);
 
     $parser = HTML::TokeParser->new($ioref);
-   
+
    
     $parser->get_tag("title");
     $title = $parser->get_text;
     $content  = html_to_wml_getcontent($self,$parser,$redirect_via,
                                        $redirect_var,$breaks_after_links);
-    
+    (-e $filename) && (unlink($filename) || warn("Couldn't unlink $filename"));
     return ($title,$content);
     
     
@@ -1124,10 +1141,7 @@ sub _start_tag {
 						     -href=>$Open_Form_Url,
 						     -postfields=>\%pfs));
 	    };
-
 	};
-
-            
     }
 }
 
@@ -1175,18 +1189,11 @@ sub AUTOLOAD {
 
     $CGI::AUTOLOAD_DEBUG = 0;
     print STDERR "CGI::WML::AUTOLOAD for $AUTOLOAD\n" if $CGI::AUTOLOAD_DEBUG;
-
-
+    
     $AUTOLOAD =~ s/.*:://;
 
     if ($WBML_TAGS{$AUTOLOAD}) {
         _make_tags($AUTOLOAD, @_);
-    }
-    else {
-        my $func = $CGI::AUTOLOAD;
-        if ($func ne "") {
-            goto &$func;
-        }
     }
 }
 
@@ -1392,6 +1399,15 @@ $query->start_wml(-dtd      => '-//WAPFORUM//DTD WML 5.5//EN',
                   -encoding => 'iso-8859-1',
                   -meta     => {'scheme'=>'foobar',
                                 'name'  =>'mystuff'} );
+
+There is no direct support for the HTTP-EQUIV type of <meta> tag. This is
+because you can modify the HTTP header directly with the header() method.
+For example, if you want to send the Cache-control: header, do it in the
+header() method:
+
+$q->header(-cache_control=>'No-cache; forua=true');
+
+
 
 =item B<end_wml()>
 
@@ -1677,15 +1693,4 @@ Angus Wood <angus@z-y-g-o.com>, with loads of additions and improvements by Andy
 perl(1), perldoc CGI, tidy(1)
 
 =cut
-
-
-
-
-
-
-
-
-
-
-
 
