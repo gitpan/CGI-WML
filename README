@@ -1,0 +1,38 @@
+Module: CGI::WML
+
+Note: This is the module previously known as CGI-WAP-1.55 before it was added
+to CPAN. CGI::WML was felt to be a better name for the module. The version 
+number has also been knocked down to 0.01 to reflect the new beginning.
+
+
+Description:
+    CGI::WML provides WML output and WML methods for CGI programming, the
+    purpose of the module is to retain the familiar CGI.pm way of
+    programming to enable experienced CGI programmers to use their
+    existing skills when creating WML applications.
+
+Copying:
+    Copyright (c) 2000 Angus Wood. All rights reserved.  This program is
+    free software; you can redistribute it and/or modify it under the same
+    terms as Perl itself.
+
+Prerequisites:
+    perl 5.002, CGI.pm and XML::Parser
+
+Build/Installation:
+    Standard build/installation supported by ExtUtils::MakeMaker(3)...
+        perl Makefile.PL
+        make
+        make test
+        make install
+    I don't know how to install Perl modules on Windows platforms, if
+    someone could provide directions so I can include them here I would
+    be grateful.
+
+Planned Enhancements:
+    Add support for /all/ attributes defined in the WML DTD, I think
+    I've covered the most important ones already, but it's nice to 
+    be complete.
+    
+Author:
+    Angus Wood <angus@z-y-g-o.com>
