@@ -27,8 +27,8 @@ require Exporter;
 @EXPORT = qw(
 );
 
-$VERSION = "0.03";
-$RCSVERSION = do{my@r=q$Revision: 1.61 $=~/\d+/g;sprintf '%d.'.'%02d'x$#r,@r};
+$VERSION = "0.04";
+$RCSVERSION = do{my@r=q$Revision: 1.62 $=~/\d+/g;sprintf '%d.'.'%02d'x$#r,@r};
 
 my $DEFAULT_DTD     = '-//WAPFORUM//DTD WML 1.1//EN';
 my $DEFAULT_DTD_URL = 'http://www.wapforum.org/DTD/wml_1.1.xml';
@@ -1184,7 +1184,9 @@ sub AUTOLOAD {
     }
     else {
         my $func = $CGI::AUTOLOAD;
-        goto &$func;
+        if ($func ne "") {
+            goto &$func;
+        }
     }
 }
 

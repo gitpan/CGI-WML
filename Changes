@@ -64,3 +64,7 @@ Revision history for Perl extension CGI::WML.
 1.61  2000/07/16
 	- Documentation changes, added POD for AUTOLOADed stuff.
         - Added module to CPAN as CGI::WML-0.03
+
+1.62  2000/07/16
+	- Bugfix on autoloader.
+        - Added module to CPAN as CGI::WML-0.04
